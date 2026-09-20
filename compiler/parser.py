@@ -1,0 +1,312 @@
+"""Recursive descent + Pratt parser for LPLang.
+
+Parses token stream into AST defined in ast.py.
+Collects diagnostics into DiagnosticBag rather than crashing on syntax errors.
+"""
+
+from .diagnostics import DiagnosticBag
+from .ast import (
+    Program, FnDecl, LetStmt, ReturnStmt, IfStmt, WhileStmt, ExprStmt,
+    IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr
+)
+
+# Precedence table for binary operators (higher = tighter binding)
+PRECEDENCE = {
+    "or": 1,
+    "||": 1,
+    "and": 2,
+    "&&": 2,
+    "==": 3,
+    "!=": 3,
+    "<": 4,
+    "<=": 4,
+    ">": 4,
+    ">=": 4,
+    "+": 5,
+    "-": 5,
+    "*": 6,
+    "/": 6,
+    "%": 6,
+}
+
+
+class Parser:
+    def __init__(self, tokens, diags=None):
+        self.tokens = tokens
+        self.pos = 0
+        self.diags = diags if diags is not None else DiagnosticBag()
+
+    def current(self):
+        if self.pos < len(self.tokens):
+            return self.tokens[self.pos]
+        return self.tokens[-1]  # EOF token
+
+    def peek(self, offset=1):
+        idx = self.pos + offset
+        if idx < len(self.tokens):
+            return self.tokens[idx]
+        return self.tokens[-1]
+
+    def advance(self):
+        tok = self.current()
+        if tok.kind != "EOF":
+            self.pos += 1
+        return tok
+
+    def match(self, kind, value=None):
+        tok = self.current()
+        if tok.kind == kind and (value is None or tok.value == value):
+            self.advance()
+            return tok
+        return None
+
+    def expect(self, kind, value=None, hint=None):
+        tok = self.match(kind, value)
+        if tok is None:
+            curr = self.current()
+            expected_desc = f"{kind}:{value}" if value else kind
+            actual_desc = f"{curr.kind}:{curr.value}" if curr.value else curr.kind
+            self.diags.error(
+                f"expected {expected_desc}, found {actual_desc}",
+                curr.line,
+                curr.column,
+                hint=hint
+            )
+            return None
+        return tok
+
+    def parse_program(self):
+        stmts = []
+        while self.current().kind != "EOF":
+            stmt = self.parse_statement()
+            if stmt is not None:
+                stmts.append(stmt)
+            else:
+                # Synchronize to next statement boundary on syntax error
+                self.synchronize()
+        return Program(stmts)
+
+    def synchronize(self):
+        self.advance()
+        while self.current().kind != "EOF":
+            if self.peek(-1).kind == "OP" and self.peek(-1).value == ";":
+                return
+            if self.current().kind == "KEYWORD" and self.current().value in ("let", "var", "fn", "return", "if", "while"):
+                return
+            self.advance()
+
+    def parse_statement(self):
+        tok = self.current()
+        if tok.kind == "KEYWORD":
+            if tok.value in ("let", "var"):
+                return self.parse_let_or_var()
+            elif tok.value == "fn":
+                return self.parse_fn_decl()
+            elif tok.value == "return":
+                return self.parse_return()
+            elif tok.value == "if":
+                return self.parse_if_stmt()
+            elif tok.value == "while":
+                return self.parse_while_stmt()
+
+        # Expression statement (including assignment or bare function call)
+        expr = self.parse_expression()
+        if expr is None:
+            return None
+        
+        # Semicolons are optional at statement ends if followed by newline/block end,
+        # but allowed and consumed if present.
+        self.match("OP", ";")
+        return ExprStmt(expr, expr.line, expr.col)
+
+    def parse_let_or_var(self):
+        kw = self.advance()
+        mutable = (kw.value == "var")
+
+        ident = self.expect("IDENT", hint="provide variable name after 'let' or 'var'")
+        if not ident:
+            return None
+
+        type_ann = None
+        if self.match("OP", ":"):
+            type_tok = self.expect("IDENT", hint="provide type name after ':'")
+            if type_tok:
+                type_ann = type_tok.value
+
+        val = None
+        if self.match("OP", "="):
+            val = self.parse_expression()
+        else:
+            self.diags.error("variable declaration requires initial value", kw.line, kw.column,
+                             hint="assign with '=' or specify default value")
+
+        self.match("OP", ";")
+        return LetStmt(ident.value, type_ann, val, mutable, kw.line, kw.column)
+
+    def parse_fn_decl(self):
+        kw = self.advance()
+        ident = self.expect("IDENT", hint="provide function name after 'fn'")
+        if not ident:
+            return None
+
+        self.expect("OP", "(", hint="open parameter list with '('")
+        params = []
+        if not self.match("OP", ")"):
+            while True:
+                pname = self.expect("IDENT", hint="expected parameter name")
+                ptype = None
+                if pname and self.match("OP", ":"):
+                    ptok = self.expect("IDENT", hint="expected parameter type")
+                    if ptok:
+                        ptype = ptok.value
+                if pname:
+                    params.append((pname.value, ptype))
+                if not self.match("OP", ","):
+                    break
+            self.expect("OP", ")", hint="close parameter list with ')'")
+
+        ret_type = None
+        if self.match("OP", "->"):
+            rtok = self.expect("IDENT", hint="expected return type after '->'")
+            if rtok:
+                ret_type = rtok.value
+
+        self.expect("OP", "{", hint="open function body with '{'")
+        body = []
+        while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+            stmt = self.parse_statement()
+            if stmt:
+                body.append(stmt)
+        self.expect("OP", "}", hint="close function body with '}'")
+
+        return FnDecl(ident.value, params, ret_type, body, kw.line, kw.column)
+
+    def parse_return(self):
+        kw = self.advance()
+        val = None
+        # If not immediately followed by semicolon or right brace, parse expression
+        if not (self.current().kind == "OP" and self.current().value in (";", "}")):
+            val = self.parse_expression()
+        self.match("OP", ";")
+        return ReturnStmt(val, kw.line, kw.column)
+
+    def parse_if_stmt(self):
+        kw = self.advance()
+        cond = self.parse_expression()
+        self.expect("OP", "{", hint="expected '{' after if condition")
+        then_body = []
+        while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+            stmt = self.parse_statement()
+            if stmt:
+                then_body.append(stmt)
+        self.expect("OP", "}", hint="expected '}' to close if block")
+
+        else_body = None
+        if self.match("KEYWORD", "else"):
+            if self.current().kind == "KEYWORD" and self.current().value == "if":
+                # else if chained as nested single statement
+                else_stmt = self.parse_if_stmt()
+                else_body = [else_stmt] if else_stmt else []
+            else:
+                self.expect("OP", "{", hint="expected '{' after else")
+                else_body = []
+                while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+                    stmt = self.parse_statement()
+                    if stmt:
+                        else_body.append(stmt)
+                self.expect("OP", "}", hint="expected '}' to close else block")
+
+        return IfStmt(cond, then_body, else_body, kw.line, kw.column)
+
+    def parse_while_stmt(self):
+        kw = self.advance()
+        cond = self.parse_expression()
+        self.expect("OP", "{", hint="expected '{' after while condition")
+        body = []
+        while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+            stmt = self.parse_statement()
+            if stmt:
+                body.append(stmt)
+        self.expect("OP", "}", hint="expected '}' to close while block")
+        return WhileStmt(cond, body, kw.line, kw.column)
+
+    # Expression parsing (Pratt precedence climbing)
+    def parse_expression(self, min_prec=0):
+        left = self.parse_prefix()
+        if left is None:
+            return None
+
+        while True:
+            tok = self.current()
+            if tok.kind in ("OP", "KEYWORD") and tok.value in PRECEDENCE:
+                prec = PRECEDENCE[tok.value]
+                if prec < min_prec:
+                    break
+                op_tok = self.advance()
+                right = self.parse_expression(prec + 1)
+                left = BinOp(op_tok.value, left, right, op_tok.line, op_tok.column)
+            else:
+                break
+
+        return left
+
+    def parse_prefix(self):
+        tok = self.current()
+
+        # Unary operators: -, !, not
+        if (tok.kind == "OP" and tok.value in ("-", "!")) or (tok.kind == "KEYWORD" and tok.value == "not"):
+            op_tok = self.advance()
+            operand = self.parse_expression(min_prec=6)
+            return UnaryOp(op_tok.value, operand, op_tok.line, op_tok.column)
+
+        # Parenthesized expression
+        if tok.kind == "OP" and tok.value == "(":
+            self.advance()
+            expr = self.parse_expression()
+            self.expect("OP", ")", hint="expected closing ')'")
+            return expr
+
+        # Literals
+        if tok.kind == "INT":
+            self.advance()
+            return IntLit(int(tok.value), tok.line, tok.column)
+
+        if tok.kind == "FLOAT":
+            self.advance()
+            return FloatLit(float(tok.value), tok.line, tok.column)
+
+        if tok.kind == "STRING":
+            self.advance()
+            return StrLit(tok.value, tok.line, tok.column)
+
+        if tok.kind == "KEYWORD" and tok.value in ("true", "false"):
+            self.advance()
+            return BoolLit(tok.value == "true", tok.line, tok.column)
+
+        # Identifier or Call
+        if tok.kind == "IDENT":
+            ident_tok = self.advance()
+            node = Ident(ident_tok.value, ident_tok.line, ident_tok.column)
+
+            # Check if this is a function call or assignment
+            if self.match("OP", "("):
+                args = []
+                if not self.match("OP", ")"):
+                    while True:
+                        arg = self.parse_expression()
+                        if arg:
+                            args.append(arg)
+                        if not self.match("OP", ","):
+                            break
+                    self.expect("OP", ")", hint="expected closing ')' in function call")
+                return Call(node, args, ident_tok.line, ident_tok.column)
+            elif self.match("OP", "="):
+                # Variable reassignment expression: x = 10
+                val = self.parse_expression()
+                return BinOp("=", node, val, ident_tok.line, ident_tok.column)
+
+            return node
+
+        self.diags.error(f"unexpected token {tok.kind}:{tok.value}", tok.line, tok.column,
+                         hint="expected expression (number, string, identifier, parentheses)")
+        return None
