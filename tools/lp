@@ -16,6 +16,7 @@ sys.path.insert(0, ROOT)
 
 from compiler.lexer import tokenize
 from compiler.parser import Parser
+from compiler.typechecker import TypeChecker
 from compiler.interpreter import Interpreter, RuntimeError
 
 
@@ -41,6 +42,12 @@ def run_file(filepath):
         print(diags.render_all(source.splitlines()), file=sys.stderr)
         sys.exit(1)
 
+    tc = TypeChecker(diags)
+    tc.check_program(ast)
+    if diags.has_errors():
+        print(diags.render_all(source.splitlines()), file=sys.stderr)
+        sys.exit(1)
+
     interp = Interpreter()
     try:
         interp.eval_program(ast)
@@ -59,7 +66,10 @@ def check_file(filepath):
 
     tokens, diags = tokenize(source)
     parser = Parser(tokens, diags)
-    _ = parser.parse_program()
+    ast = parser.parse_program()
+    if not diags.has_errors():
+        tc = TypeChecker(diags)
+        tc.check_program(ast)
 
     if diags.has_errors():
         print(diags.render_all(source.splitlines()), file=sys.stderr)
