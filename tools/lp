@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""LPLang Driver CLI (`lp`).
+
+Provides commands:
+  lp run <file.lp>     Execute an LPLang script
+  lp check <file.lp>   Parse & validate syntax and report diagnostics
+  lp version           Print LPLang version
+"""
+
+import sys
+import os
+
+# Ensure LPLang root is on sys.path
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from compiler.lexer import tokenize
+from compiler.parser import Parser
+from compiler.interpreter import Interpreter, RuntimeError
+
+
+VERSION = "0.1.0-alpha.1"
+
+
+def run_file(filepath):
+    if not os.path.exists(filepath):
+        print(f"Error: file '{filepath}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        source = f.read()
+
+    tokens, diags = tokenize(source)
+    if diags.has_errors():
+        print(diags.render_all(source.splitlines()), file=sys.stderr)
+        sys.exit(1)
+
+    parser = Parser(tokens, diags)
+    ast = parser.parse_program()
+    if diags.has_errors():
+        print(diags.render_all(source.splitlines()), file=sys.stderr)
+        sys.exit(1)
+
+    interp = Interpreter()
+    try:
+        interp.eval_program(ast)
+    except RuntimeError as err:
+        print(f"RuntimeError[{err.line}:{err.col}]: {err.message}", file=sys.stderr)
+        sys.exit(1)
+
+
+def check_file(filepath):
+    if not os.path.exists(filepath):
+        print(f"Error: file '{filepath}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        source = f.read()
+
+    tokens, diags = tokenize(source)
+    parser = Parser(tokens, diags)
+    _ = parser.parse_program()
+
+    if diags.has_errors():
+        print(diags.render_all(source.splitlines()), file=sys.stderr)
+        print(f"\nFound {diags.count_errors()} error(s).", file=sys.stderr)
+        sys.exit(1)
+    else:
+        print(f"Validation successful: '{filepath}' has no syntax errors.")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(f"LPLang {VERSION} Driver")
+        print("Usage: lp <command> [arguments]")
+        print("Commands:")
+        print("  run <file.lp>     Execute a .lp program")
+        print("  check <file.lp>   Validate syntax and diagnostics")
+        print("  version           Display compiler version")
+        sys.exit(0)
+
+    cmd = sys.argv[1]
+    if cmd == "version":
+        print(f"LPLang version {VERSION} (bootstrap Stage 0)")
+    elif cmd == "run":
+        if len(sys.argv) < 3:
+            print("Error: missing file argument for 'run'", file=sys.stderr)
+            sys.exit(1)
+        run_file(sys.argv[2])
+    elif cmd == "check":
+        if len(sys.argv) < 3:
+            print("Error: missing file argument for 'check'", file=sys.stderr)
+            sys.exit(1)
+        check_file(sys.argv[2])
+    else:
+        print(f"Unknown command: '{cmd}'. Use 'run', 'check', or 'version'.", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
