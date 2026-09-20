@@ -33,7 +33,20 @@ Reserved keywords:
 - `string`: UTF-8 encoded text sequences.
 - `bool`: boolean value (`true` or `false`).
 
-### 2.2 Bindings & Mutability
+### 2.2 Struct Types
+Structs are nominal, fixed-layout data types.
+```
+struct Name {
+    field1: type1,
+    field2: type2,
+}
+```
+- Fields are typed and must be initialized in struct literals.
+- Struct literals: `Name { field1: expr1, field2: expr2 }`.
+- Field access: `expr.field`.
+- Structs are compared by value (field-wise equality).
+
+### 2.3 Bindings & Mutability
 - `let name [: type] = expr;`: immutable binding. Reassignment is a compile-time (and runtime) error.
 - `var name [: type] = expr;`: mutable binding. Reassignment allowed with matching type.
 - If type annotation is omitted, the type is statically inferred from the initializer.

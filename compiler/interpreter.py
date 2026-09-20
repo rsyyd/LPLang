@@ -49,6 +49,22 @@ class Environment:
         raise RuntimeError(f"undefined variable '{name}'", line, col)
 
 
+class LPLangStruct:
+    """Runtime representation of an LPLang struct instance."""
+    def __init__(self, type_name, fields):
+        self.type_name = type_name
+        self.fields = fields
+
+    def __repr__(self):
+        inner = ", ".join(f"{k}: {v}" for k, v in self.fields.items())
+        return f"{self.type_name} {{ {inner} }}"
+
+    def __eq__(self, other):
+        return (isinstance(other, LPLangStruct)
+                and self.type_name == other.type_name
+                and self.fields == other.fields)
+
+
 class Interpreter:
     def __init__(self):
         self.globals = Environment()
@@ -99,6 +115,11 @@ class Interpreter:
             env.define(stmt.name, stmt, mutable=False)
             return None
 
+        elif kind == "StructDecl":
+            # Store struct definition (schema) in environment
+            env.define(stmt.name, stmt, mutable=False)
+            return None
+
         elif kind == "ReturnStmt":
             val = self.eval_expr(stmt.value, env) if stmt.value else None
             raise ReturnValue(val)
@@ -143,6 +164,23 @@ class Interpreter:
             elif expr.op in ("!", "not"):
                 return not val
             raise RuntimeError(f"unsupported unary op '{expr.op}'", expr.line, expr.col)
+
+        elif kind == "StructLit":
+            decl = env.get(expr.type_name, expr.line, expr.col)
+            if decl.__class__.__name__ != "StructDecl":
+                raise RuntimeError(f"'{expr.type_name}' is not a struct", expr.line, expr.col)
+            field_dict = {}
+            for fname, fexpr in expr.fields:
+                field_dict[fname] = self.eval_expr(fexpr, env)
+            return LPLangStruct(expr.type_name, field_dict)
+
+        elif kind == "FieldAccess":
+            obj = self.eval_expr(expr.object, env)
+            if not isinstance(obj, LPLangStruct):
+                raise RuntimeError(f"cannot access field '{expr.field}' on non-struct", expr.line, expr.col)
+            if expr.field not in obj.fields:
+                raise RuntimeError(f"struct '{obj.type_name}' has no field '{expr.field}'", expr.line, expr.col)
+            return obj.fields[expr.field]
 
         elif kind == "BinOp":
             if expr.op == "=":
