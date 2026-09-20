@@ -96,6 +96,28 @@ class Call(Node):
         self.args = args
 
 @dataclass
+class StructLit(Node):
+    type_name: str
+    fields: list      # list of (field_name, expr) tuples
+    line: int = 0
+    col: int = 0
+    def __init__(self, type_name, fields, line=0, col=0):
+        super().__init__(line, col)
+        self.type_name = type_name
+        self.fields = fields
+
+@dataclass
+class FieldAccess(Node):
+    object: Any
+    field: str
+    line: int = 0
+    col: int = 0
+    def __init__(self, object, field, line=0, col=0):
+        super().__init__(line, col)
+        self.object = object
+        self.field = field
+
+@dataclass
 class IfExpr(Node):
     cond: Any
     then_branch: Any
@@ -182,6 +204,17 @@ class FnDecl(Node):
         self.params = params
         self.ret_type = ret_type
         self.body = body
+
+@dataclass
+class StructDecl(Node):
+    name: str
+    fields: list          # list of (field_name, field_type) tuples
+    line: int = 0
+    col: int = 0
+    def __init__(self, name, fields, line=0, col=0):
+        super().__init__(line, col)
+        self.name = name
+        self.fields = fields
 
 
 # ---- Top level ----

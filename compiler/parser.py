@@ -7,7 +7,8 @@ Collects diagnostics into DiagnosticBag rather than crashing on syntax errors.
 from .diagnostics import DiagnosticBag
 from .ast import (
     Program, FnDecl, LetStmt, ReturnStmt, IfStmt, WhileStmt, ExprStmt,
-    IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr
+    IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr,
+    StructDecl, StructLit, FieldAccess
 )
 
 # Precedence table for binary operators (higher = tighter binding)
@@ -102,6 +103,8 @@ class Parser:
                 return self.parse_let_or_var()
             elif tok.value == "fn":
                 return self.parse_fn_decl()
+            elif tok.value == "struct":
+                return self.parse_struct_decl()
             elif tok.value == "return":
                 return self.parse_return()
             elif tok.value == "if":
@@ -142,6 +145,28 @@ class Parser:
 
         self.match("OP", ";")
         return LetStmt(ident.value, type_ann, val, mutable, kw.line, kw.column)
+
+    def parse_struct_decl(self):
+        kw = self.advance()  # consume 'struct'
+        ident = self.expect("IDENT", hint="provide struct name after 'struct'")
+        if not ident:
+            return None
+
+        self.expect("OP", "{", hint="open struct body with '{'")
+        fields = []
+        while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+            fname = self.expect("IDENT", hint="expected field name")
+            if not fname:
+                break
+            self.expect("OP", ":", hint="expected ':' after field name")
+            ftype_tok = self.expect("IDENT", hint="expected field type")
+            if not ftype_tok:
+                break
+            fields.append((fname.value, ftype_tok.value))
+            self.match("OP", ",")  # optional trailing comma
+        
+        self.expect("OP", "}", hint="close struct body with '}'")
+        return StructDecl(ident.value, fields, kw.line, kw.column)
 
     def parse_fn_decl(self):
         kw = self.advance()
@@ -283,28 +308,71 @@ class Parser:
             self.advance()
             return BoolLit(tok.value == "true", tok.line, tok.column)
 
-        # Identifier or Call
+        # Identifier or Call / Struct Literal / Field Access
         if tok.kind == "IDENT":
             ident_tok = self.advance()
+            
+            # Struct literal: TypeName { field: expr, ... }
+            if self.current().kind == "OP" and self.current().value == "{":
+                # Lookahead to distinguish struct lit from block/if/while body is tricky in pure LL(1)
+                # Heuristic: If we are in an expression context and see IDENT {, assume struct lit.
+                # This might conflict with if/while blocks if not careful, but parse_expression is usually RHS.
+                # Better: Check if next tokens look like `field :` pattern? 
+                # For now, simple approach: if it's a capitalized identifier (convention) OR just try parsing as struct.
+                # Actually, let's use a flag or check context. 
+                # Since this is a bootstrap, let's assume any IDENT followed by { in expression position is a struct literal.
+                # We need to save pos to backtrack if it fails? No, parser doesn't backtrack easily here.
+                
+                # Let's refine: Only treat as struct literal if the identifier starts with uppercase (common convention)
+                # OR if we explicitly want to support lowercase structs. 
+                # Given LPLang spec draft says `struct Point`, let's stick to Capitalized for literals to avoid ambiguity with blocks.
+                if ident_tok.value[0].isupper():
+                    self.advance() # consume '{'
+                    fields = []
+                    while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+                        fname = self.expect("IDENT", hint="expected field name in struct literal")
+                        if not fname: break
+                        self.expect("OP", ":", hint="expected ':' after field name in struct literal")
+                        fexpr = self.parse_expression()
+                        if fexpr is None: break
+                        fields.append((fname.value, fexpr))
+                        self.match("OP", ",")
+                    self.expect("OP", "}", hint="close struct literal with '}'")
+                    return StructLit(ident_tok.value, fields, ident_tok.line, ident_tok.column)
+
             node = Ident(ident_tok.value, ident_tok.line, ident_tok.column)
 
-            # Check if this is a function call or assignment
-            if self.match("OP", "("):
-                args = []
-                if not self.match("OP", ")"):
-                    while True:
-                        arg = self.parse_expression()
-                        if arg:
-                            args.append(arg)
-                        if not self.match("OP", ","):
-                            break
-                    self.expect("OP", ")", hint="expected closing ')' in function call")
-                return Call(node, args, ident_tok.line, ident_tok.column)
-            elif self.match("OP", "="):
-                # Variable reassignment expression: x = 10
-                val = self.parse_expression()
-                return BinOp("=", node, val, ident_tok.line, ident_tok.column)
-
+            # Postfix chain: .field or (args)
+            while True:
+                if self.current().kind == "OP" and self.current().value == ".":
+                    self.advance()
+                    field_tok = self.expect("IDENT", hint="expected field name after '.'")
+                    if not field_tok:
+                        break
+                    node = FieldAccess(node, field_tok.value, field_tok.line, field_tok.column)
+                elif self.current().kind == "OP" and self.current().value == "(":
+                    self.advance()
+                    args = []
+                    if not self.match("OP", ")"):
+                        while True:
+                            arg = self.parse_expression()
+                            if arg:
+                                args.append(arg)
+                            if not self.match("OP", ","):
+                                break
+                        self.expect("OP", ")", hint="expected closing ')' in function call")
+                    node = Call(node, args, node.line, node.col)
+                else:
+                    break
+            
+            # Assignment check (only if not part of a chain yet? No, assignment target must be Ident or FieldAccess)
+            # But our loop already consumed dots/calls. 
+            # If node is Ident or FieldAccess, we can assign.
+            if isinstance(node, (Ident, FieldAccess)):
+                if self.match("OP", "="):
+                    val = self.parse_expression()
+                    return BinOp("=", node, val, node.line, node.col)
+            
             return node
 
         self.diags.error(f"unexpected token {tok.kind}:{tok.value}", tok.line, tok.column,

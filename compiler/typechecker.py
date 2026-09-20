@@ -47,6 +47,7 @@ class TypeChecker:
         self.diags = diags if diags is not None else DiagnosticBag()
         self.scopes = [{}]          # stack of name -> (type, mutable)
         self.functions = {}         # name -> FnSignature
+        self.structs = {}           # name -> dict[field_name, field_type]
         self.current_fn_ret = None  # expected return type of enclosing fn
 
     # -- scope helpers --
@@ -73,14 +74,35 @@ class TypeChecker:
 
     # -- program --
 
+    def is_valid_type(self, typ):
+        return typ in PRIMITIVES or typ in self.structs
+
     def check_program(self, program):
+        # Pass 0: collect struct declarations
+        for stmt in program.statements:
+            if stmt.__class__.__name__ == "StructDecl":
+                self._register_struct(stmt)
+
         # Pass 1: collect function signatures (allows forward references)
         for stmt in program.statements:
             if stmt.__class__.__name__ == "FnDecl":
                 self._register_fn(stmt)
+
         # Pass 2: check bodies
         for stmt in program.statements:
             self.check_stmt(stmt)
+
+    def _register_struct(self, sdecl):
+        if sdecl.name in self.structs or sdecl.name in PRIMITIVES:
+            self.diags.error(f"duplicate type definition '{sdecl.name}'", sdecl.line, sdecl.col)
+            return
+        fields = {}
+        for fname, ftype in sdecl.fields:
+            if not self.is_valid_type(ftype):
+                self.diags.error(f"unknown type '{ftype}' for field '{fname}' in struct '{sdecl.name}'",
+                                 sdecl.line, sdecl.col)
+            fields[fname] = ftype
+        self.structs[sdecl.name] = fields
 
     def _register_fn(self, fn):
         params = []
@@ -91,18 +113,16 @@ class TypeChecker:
                     fn.line, fn.col,
                     hint="write e.g. fn f(x: int) so calls can be type-checked")
                 params.append((pname, None))
-            elif ptype not in PRIMITIVES:
+            elif not self.is_valid_type(ptype):
                 self.diags.error(f"unknown type '{ptype}' for parameter '{pname}'",
-                                 fn.line, fn.col,
-                                 hint=f"supported primitive types: {', '.join(sorted(PRIMITIVES))}")
+                                 fn.line, fn.col)
                 params.append((pname, None))
             else:
                 params.append((pname, ptype))
 
-        if fn.ret_type is not None and fn.ret_type not in PRIMITIVES:
+        if fn.ret_type is not None and not self.is_valid_type(fn.ret_type):
             self.diags.error(f"unknown return type '{fn.ret_type}' for function '{fn.name}'",
-                             fn.line, fn.col,
-                             hint=f"supported primitive types: {', '.join(sorted(PRIMITIVES))}")
+                             fn.line, fn.col)
             ret = None
         else:
             ret = fn.ret_type
@@ -164,10 +184,9 @@ class TypeChecker:
         init_t = self.check_expr(stmt.value) if stmt.value is not None else None
 
         if stmt.type_ann is not None:
-            if stmt.type_ann not in PRIMITIVES:
+            if not self.is_valid_type(stmt.type_ann):
                 self.diags.error(f"unknown type '{stmt.type_ann}' for variable '{stmt.name}'",
-                                 stmt.line, stmt.col,
-                                 hint=f"supported primitive types: {', '.join(sorted(PRIMITIVES))}")
+                                 stmt.line, stmt.col)
                 ann_t = None
             else:
                 ann_t = stmt.type_ann
@@ -233,6 +252,40 @@ class TypeChecker:
 
         if kind == "Call":
             return self._check_call(expr)
+
+        if kind == "StructLit":
+            if expr.type_name not in self.structs:
+                self.diags.error(f"unknown struct type '{expr.type_name}'", expr.line, expr.col)
+                return None
+            expected_fields = self.structs[expr.type_name]
+            provided_fields = set()
+            for fname, fexpr in expr.fields:
+                provided_fields.add(fname)
+                ft = self.check_expr(fexpr)
+                if fname not in expected_fields:
+                    self.diags.error(f"struct '{expr.type_name}' has no field named '{fname}'", fexpr.line, fexpr.col)
+                else:
+                    exp_t = expected_fields[fname]
+                    if ft is not None and ft != exp_t:
+                        self.diags.error(f"field '{fname}' of '{expr.type_name}': expected '{exp_t}', got '{ft}'",
+                                         fexpr.line, fexpr.col)
+            for ef in expected_fields:
+                if ef not in provided_fields:
+                    self.diags.error(f"missing field '{ef}' in literal for '{expr.type_name}'", expr.line, expr.col)
+            return expr.type_name
+
+        if kind == "FieldAccess":
+            obj_t = self.check_expr(expr.object)
+            if obj_t is None:
+                return None
+            if obj_t not in self.structs:
+                self.diags.error(f"cannot access field on non-struct type '{obj_t}'", expr.line, expr.col)
+                return None
+            fields = self.structs[obj_t]
+            if expr.field not in fields:
+                self.diags.error(f"struct '{obj_t}' has no field named '{expr.field}'", expr.line, expr.col)
+                return None
+            return fields[expr.field]
 
         if kind == "IfExpr":
             # If-expressions are parsed only in expression position; Stage 0
