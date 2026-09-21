@@ -65,6 +65,26 @@ class LPLangStruct:
                 and self.fields == other.fields)
 
 
+class LPLangEnumVariant:
+    """Runtime representation of an enum variant."""
+    def __init__(self, enum_name, variant_name, values):
+        self.enum_name = enum_name
+        self.variant_name = variant_name
+        self.values = values  # list of payload values
+
+    def __repr__(self):
+        if not self.values:
+            return f"{self.enum_name}::{self.variant_name}"
+        vals = ", ".join(repr(v) for v in self.values)
+        return f"{self.enum_name}::{self.variant_name}({vals})"
+
+    def __eq__(self, other):
+        return (isinstance(other, LPLangEnumVariant)
+                and self.enum_name == other.enum_name
+                and self.variant_name == other.variant_name
+                and self.values == other.values)
+
+
 class Interpreter:
     def __init__(self):
         self.globals = Environment()
@@ -120,6 +140,39 @@ class Interpreter:
             env.define(stmt.name, stmt, mutable=False)
             return None
 
+        elif kind == "EnumDecl":
+            # Store enum definition in environment
+            env.define(stmt.name, stmt, mutable=False)
+            # Register variant constructors or values directly if needed
+            for vname, payloads in stmt.variants:
+                key = f"{stmt.name}::{vname}"
+                if len(payloads) == 0:
+                    val = LPLangEnumVariant(stmt.name, vname, [])
+                    env.define(key, val, mutable=False)
+                else:
+                    # constructor function
+                    def make_ctor(s_name, v_name, num_args):
+                        def ctor(*args):
+                            if len(args) != num_args:
+                                raise RuntimeError(f"{s_name}::{v_name} expects {num_args} args, got {len(args)}")
+                            return LPLangEnumVariant(s_name, v_name, list(args))
+                        return ctor
+                    env.define(key, make_ctor(stmt.name, vname, len(payloads)), mutable=False)
+            return None
+
+        elif kind == "MatchStmt":
+            target_val = self.eval_expr(stmt.target, env)
+            for arm in stmt.arms:
+                matched, bindings = self.match_pattern(arm.pattern, target_val)
+                if matched:
+                    arm_env = Environment(env)
+                    for bname, bval in bindings.items():
+                        arm_env.define(bname, bval, mutable=True)
+                    for s in arm.body:
+                        self.exec_stmt(s, arm_env)
+                    break
+            return None
+
         elif kind == "ReturnStmt":
             val = self.eval_expr(stmt.value, env) if stmt.value else None
             raise ReturnValue(val)
@@ -147,6 +200,32 @@ class Interpreter:
             return self.eval_expr(stmt.expr, env)
 
         raise RuntimeError(f"unknown statement kind: {kind}", stmt.line, stmt.col)
+
+    def match_pattern(self, pattern, val):
+        pkind = pattern.__class__.__name__
+        if pkind == "WildcardPattern":
+            return True, {}
+        elif pkind == "LitPattern":
+            return val == pattern.value, {}
+        elif pkind == "IdentPattern":
+            return True, {pattern.name: val}
+        elif pkind == "VariantPattern":
+            if not isinstance(val, LPLangEnumVariant):
+                return False, {}
+            if pattern.enum_name is not None and pattern.enum_name != val.enum_name:
+                return False, {}
+            if pattern.variant_name != val.variant_name:
+                return False, {}
+            if len(pattern.sub_patterns) != len(val.values):
+                return False, {}
+            all_bindings = {}
+            for sub_p, sub_v in zip(pattern.sub_patterns, val.values):
+                matched, sub_b = self.match_pattern(sub_p, sub_v)
+                if not matched:
+                    return False, {}
+                all_bindings.update(sub_b)
+            return True, all_bindings
+        return False, {}
 
     def eval_expr(self, expr, env):
         kind = expr.__class__.__name__

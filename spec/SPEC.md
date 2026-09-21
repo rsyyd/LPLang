@@ -46,7 +46,40 @@ struct Name {
 - Field access: `expr.field`.
 - Structs are compared by value (field-wise equality).
 
-### 2.3 Bindings & Mutability
+### 2.3 Enum Types
+Enums are tagged unions with optional payload types.
+```
+enum Name {
+    Variant1,
+    Variant2(payload_type1),
+    Variant3(payload_type1, payload_type2),
+}
+```
+- Variants without payloads are unit values: `Name::Variant1`.
+- Variants with payloads act as constructors: `Name::Variant2(expr)`.
+- Payload types must be declared types (primitives, structs, or enums).
+- Enum values compare by variant identity and payload values.
+
+### 2.4 Pattern Matching
+`match` dispatches on a value against a sequence of patterns; the first
+matching arm executes. Patterns:
+- `_` — wildcard, matches anything.
+- literals (`42`, `3.14`, `"text"`, `true`) — match by equality.
+- `identifier` — binds the matched value to a new variable.
+- `Variant`, `Enum::Variant`, `Variant(p1, p2)` — match enum variants,
+  binding payloads to sub-patterns.
+```
+match expr {
+    Pattern1 => { ... },
+    Pattern2(x, y) => { ... },
+    _ => { ... },
+}
+```
+- Exhaustiveness checking: NOT YET IMPLEMENTED (a match without a
+  wildcard/fallthrough arm that matches nothing falls through silently;
+  this is a known limitation, to be made a compile error).
+
+### 2.5 Bindings & Mutability
 - `let name [: type] = expr;`: immutable binding. Reassignment is a compile-time (and runtime) error.
 - `var name [: type] = expr;`: mutable binding. Reassignment allowed with matching type.
 - If type annotation is omitted, the type is statically inferred from the initializer.
