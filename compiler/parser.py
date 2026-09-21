@@ -10,7 +10,8 @@ from .ast import (
     IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr,
     StructDecl, StructLit, FieldAccess,
     EnumDecl, MatchStmt, MatchArm,
-    WildcardPattern, LitPattern, IdentPattern, VariantPattern
+    WildcardPattern, LitPattern, IdentPattern, VariantPattern,
+    ImportStmtStub
 )
 
 # Precedence table for binary operators (higher = tighter binding)
@@ -111,6 +112,8 @@ class Parser:
                 return self.parse_enum_decl()
             elif tok.value == "match":
                 return self.parse_match_stmt()
+            elif tok.value == "import":
+                return self.parse_import()
             elif tok.value == "return":
                 return self.parse_return()
             elif tok.value == "if":
@@ -151,6 +154,14 @@ class Parser:
 
         self.match("OP", ";")
         return LetStmt(ident.value, type_ann, val, mutable, kw.line, kw.column)
+
+    def parse_import(self):
+        kw = self.advance()  # consume 'import'
+        ident = self.expect("IDENT", hint="provide module name after 'import'")
+        if not ident:
+            return None
+        self.match("OP", ";")
+        return ImportStmtStub(ident.value, kw.line, kw.column)
 
     def parse_struct_decl(self):
         kw = self.advance()  # consume 'struct'

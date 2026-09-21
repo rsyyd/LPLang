@@ -18,6 +18,8 @@ from compiler.lexer import tokenize
 from compiler.parser import Parser
 from compiler.typechecker import TypeChecker
 from compiler.interpreter import Interpreter, RuntimeError
+from compiler.loader import load_program
+from compiler.diagnostics import DiagnosticBag
 
 
 VERSION = "0.1.0-alpha.1"
@@ -28,29 +30,30 @@ def run_file(filepath):
         print(f"Error: file '{filepath}' not found.", file=sys.stderr)
         sys.exit(1)
 
-    with open(filepath, "r", encoding="utf-8") as f:
-        source = f.read()
-
-    tokens, diags = tokenize(source)
+    diags = DiagnosticBag()
+    programs, _ = load_program(filepath, diags)
     if diags.has_errors():
-        print(diags.render_all(source.splitlines()), file=sys.stderr)
-        sys.exit(1)
-
-    parser = Parser(tokens, diags)
-    ast = parser.parse_program()
-    if diags.has_errors():
-        print(diags.render_all(source.splitlines()), file=sys.stderr)
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        print(diags.render_all(lines), file=sys.stderr)
         sys.exit(1)
 
     tc = TypeChecker(diags)
-    tc.check_program(ast)
+    # Check all modules in dependency order
+    for mod_name, prog in programs:
+        tc.check_program(prog)
+
     if diags.has_errors():
-        print(diags.render_all(source.splitlines()), file=sys.stderr)
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        print(diags.render_all(lines), file=sys.stderr)
         sys.exit(1)
 
     interp = Interpreter()
     try:
-        interp.eval_program(ast)
+        # Execute all imported modules first, then root
+        for mod_name, prog in programs:
+            interp.eval_program(prog)
     except RuntimeError as err:
         print(f"RuntimeError[{err.line}:{err.col}]: {err.message}", file=sys.stderr)
         sys.exit(1)
@@ -61,22 +64,21 @@ def check_file(filepath):
         print(f"Error: file '{filepath}' not found.", file=sys.stderr)
         sys.exit(1)
 
-    with open(filepath, "r", encoding="utf-8") as f:
-        source = f.read()
-
-    tokens, diags = tokenize(source)
-    parser = Parser(tokens, diags)
-    ast = parser.parse_program()
+    diags = DiagnosticBag()
+    programs, _ = load_program(filepath, diags)
     if not diags.has_errors():
         tc = TypeChecker(diags)
-        tc.check_program(ast)
+        for mod_name, prog in programs:
+            tc.check_program(prog)
 
     if diags.has_errors():
-        print(diags.render_all(source.splitlines()), file=sys.stderr)
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        print(diags.render_all(lines), file=sys.stderr)
         print(f"\nFound {diags.count_errors()} error(s).", file=sys.stderr)
         sys.exit(1)
     else:
-        print(f"Validation successful: '{filepath}' has no syntax errors.")
+        print(f"Validation successful: '{filepath}' and its dependencies have no errors.")
 
 
 def main():
