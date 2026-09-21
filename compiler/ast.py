@@ -285,6 +285,15 @@ class MatchStmt(Node):
         self.target = target
         self.arms = arms
 
+@dataclass
+class ImportStmtStub(Node):
+    module_name: str
+    line: int = 0
+    col: int = 0
+    def __init__(self, module_name, line=0, col=0):
+        super().__init__(line, col)
+        self.module_name = module_name
+
 
 # ---- Top level ----
 
