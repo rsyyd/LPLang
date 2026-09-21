@@ -12,7 +12,8 @@ from .ast import (
     EnumDecl, MatchStmt, MatchArm,
     WildcardPattern, LitPattern, IdentPattern, VariantPattern,
     ImportStmtStub,
-    ListLit, IndexAccess
+    ListLit, IndexAccess,
+    AsyncFnDecl, AwaitExpr, SpawnExpr
 )
 
 # Precedence table for binary operators (higher = tighter binding)
@@ -121,6 +122,8 @@ class Parser:
                 return self.parse_if_stmt()
             elif tok.value == "while":
                 return self.parse_while_stmt()
+            elif tok.value == "async":
+                return self.parse_async_fn_decl()
 
         # Expression statement (including assignment or bare function call)
         expr = self.parse_expression()
@@ -163,6 +166,47 @@ class Parser:
             return None
         self.match("OP", ";")
         return ImportStmtStub(ident.value, kw.line, kw.column)
+
+    def parse_async_fn_decl(self):
+        kw = self.advance()  # consume 'async'
+        fn_tok = self.expect("KEYWORD", "fn", hint="expected 'fn' after 'async'")
+        if not fn_tok:
+            return None
+        ident = self.expect("IDENT", hint="provide function name after 'async fn'")
+        if not ident:
+            return None
+
+        self.expect("OP", "(", hint="open parameter list with '('")
+        params = []
+        if not self.match("OP", ")"):
+            while True:
+                pname = self.expect("IDENT", hint="expected parameter name")
+                ptype = None
+                if pname and self.match("OP", ":"):
+                    ptok = self.expect("IDENT", hint="expected parameter type")
+                    if ptok:
+                        ptype = ptok.value
+                if pname:
+                    params.append((pname.value, ptype))
+                if not self.match("OP", ","):
+                    break
+            self.expect("OP", ")", hint="close parameter list with ')'")
+
+        ret_type = None
+        if self.match("OP", "->"):
+            rtok = self.expect("IDENT", hint="expected return type after '->'")
+            if rtok:
+                ret_type = rtok.value
+
+        self.expect("OP", "{", hint="open function body with '{'")
+        body = []
+        while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+            stmt = self.parse_statement()
+            if stmt:
+                body.append(stmt)
+        self.expect("OP", "}", hint="close function body with '}'")
+
+        return AsyncFnDecl(ident.value, params, ret_type, body, kw.line, kw.column)
 
     def parse_struct_decl(self):
         kw = self.advance()  # consume 'struct'
@@ -415,6 +459,18 @@ class Parser:
             op_tok = self.advance()
             operand = self.parse_expression(min_prec=6)
             return UnaryOp(op_tok.value, operand, op_tok.line, op_tok.column)
+
+        # await expr
+        if tok.kind == "KEYWORD" and tok.value == "await":
+            op_tok = self.advance()
+            operand = self.parse_expression(min_prec=0)
+            return AwaitExpr(operand, op_tok.line, op_tok.column)
+
+        # spawn expr
+        if tok.kind == "KEYWORD" and tok.value == "spawn":
+            op_tok = self.advance()
+            operand = self.parse_expression(min_prec=0)
+            return SpawnExpr(operand, op_tok.line, op_tok.column)
 
         # Parenthesized expression
         if tok.kind == "OP" and tok.value == "(":

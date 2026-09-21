@@ -88,7 +88,7 @@ class TypeChecker:
 
         # Pass 1: collect function signatures (allows forward references)
         for stmt in program.statements:
-            if stmt.__class__.__name__ == "FnDecl":
+            if stmt.__class__.__name__ in ("FnDecl", "AsyncFnDecl"):
                 self._register_fn(stmt)
 
         # Pass 2: check bodies
@@ -149,7 +149,7 @@ class TypeChecker:
     def check_stmt(self, stmt):
         kind = stmt.__class__.__name__
 
-        if kind == "FnDecl":
+        if kind in ("FnDecl", "AsyncFnDecl"):
             self._check_fn_body(stmt)
         elif kind == "LetStmt":
             self._check_let(stmt)
@@ -225,8 +225,9 @@ class TypeChecker:
         else:
             ann_t = init_t
 
-        if ann_t is not None:
-            self.declare(stmt.name, ann_t, stmt.mutable, stmt.line, stmt.col)
+        # Declare even when ann_t is None (e.g. spawn/await/index results)
+        # so the variable is in scope; its type is simply unchecked.
+        self.declare(stmt.name, ann_t, stmt.mutable, stmt.line, stmt.col)
 
     def _check_return(self, stmt):
         val_t = self.check_expr(stmt.value) if stmt.value is not None else None
@@ -301,6 +302,16 @@ class TypeChecker:
             if idx_t is not None and idx_t != "int":
                 self.diags.error(f"index must be int, got '{idx_t}'", expr.index.line, expr.index.col)
             # ponytail: returns None (element type unknown without generics); upgrade when generic list<T> is added.
+            return None
+
+        if kind == "AwaitExpr":
+            # Awaiting resolves the task to its result type; element type
+            # unknown without full async generics, so return None (unchecked).
+            self.check_expr(expr.expr)
+            return None
+
+        if kind == "SpawnExpr":
+            self.check_expr(expr.expr)
             return None
 
         if kind == "Ident":
@@ -515,6 +526,12 @@ class TypeChecker:
             else:
                 self.check_expr(expr.args[0])
                 self.check_expr(expr.args[1])
+            return None
+        if name == "sleep":
+            if len(expr.args) != 1:
+                self.diags.error("sleep takes exactly 1 argument", expr.line, expr.col)
+            else:
+                self.check_expr(expr.args[0])
             return None
         if name == "assert":
             if len(expr.args) < 1 or len(expr.args) > 2:
