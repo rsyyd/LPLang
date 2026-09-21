@@ -84,9 +84,15 @@ def load_program(path, diags, loaded=None):
     graph[abs_path] = [name for name, _, _ in import_names]
 
     base_dir = os.path.dirname(abs_path)
+    std_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "std")
     for name, line, col in import_names:
-        sub_path = os.path.join(base_dir, name + ".lp")
-        sub_programs, sub_graph = load_program(sub_path, diags, loaded)
+        # Search order: importing file's directory, then stdlib
+        candidate = os.path.join(base_dir, name + ".lp")
+        if not os.path.exists(candidate):
+            std_candidate = os.path.join(std_dir, name + ".lp")
+            if os.path.exists(std_candidate):
+                candidate = std_candidate
+        sub_programs, sub_graph = load_program(candidate, diags, loaded)
         programs.extend(sub_programs)
         graph.update(sub_graph)
 
