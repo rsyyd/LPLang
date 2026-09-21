@@ -9,7 +9,7 @@ from .ast import (
     Program, FnDecl, LetStmt, ReturnStmt, IfStmt, WhileStmt, ExprStmt,
     IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr,
     StructDecl, StructLit, FieldAccess,
-    EnumDecl, MatchStmt, MatchArm,
+    EnumDecl, MatchStmt, MatchArm, MatchExpr,
     WildcardPattern, LitPattern, IdentPattern, VariantPattern,
     ImportStmtStub,
     ListLit, IndexAccess,
@@ -283,6 +283,23 @@ class Parser:
         self.expect("OP", "}", hint="expected '}' to close match body")
         return MatchStmt(target, arms, kw.line, kw.column)
 
+    def parse_match_expr(self):
+        kw = self.advance()  # consume 'match' (expression position)
+        target = self.parse_expression()
+        self.expect("OP", "{", hint="expected '{' after match target")
+        arms = []
+        while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+            pattern = self.parse_pattern()
+            self.expect("OP", "=>", hint="expected '=>' after match pattern")
+            arm_expr = self.parse_expression()
+            if arm_expr is None:
+                break
+            self.match("OP", ",")
+            arms.append((pattern, arm_expr))
+
+        self.expect("OP", "}", hint="expected '}' to close match expression")
+        return MatchExpr(target, arms, kw.line, kw.column)
+
     def parse_pattern(self):
         tok = self.current()
         # Wildcard _
@@ -471,6 +488,10 @@ class Parser:
             op_tok = self.advance()
             operand = self.parse_expression(min_prec=0)
             return SpawnExpr(operand, op_tok.line, op_tok.column)
+
+        # match expression
+        if tok.kind == "KEYWORD" and tok.value == "match":
+            return self.parse_match_expr()
 
         # Parenthesized expression
         if tok.kind == "OP" and tok.value == "(":

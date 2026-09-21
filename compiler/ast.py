@@ -349,6 +349,18 @@ class SpawnExpr(Node):
         self.expr = expr
 
 
+@dataclass
+class MatchExpr(Node):
+    target: Any
+    arms: list            # list of (pattern, expr)
+    line: int = 0
+    col: int = 0
+    def __init__(self, target, arms, line=0, col=0):
+        super().__init__(line, col)
+        self.target = target
+        self.arms = arms
+
+
 # ---- Top level ----
 
 @dataclass
