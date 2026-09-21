@@ -107,6 +107,26 @@ class StructLit(Node):
         self.fields = fields
 
 @dataclass
+class ListLit(Node):
+    elements: list
+    line: int = 0
+    col: int = 0
+    def __init__(self, elements, line=0, col=0):
+        super().__init__(line, col)
+        self.elements = elements
+
+@dataclass
+class IndexAccess(Node):
+    target: Any
+    index: Any
+    line: int = 0
+    col: int = 0
+    def __init__(self, target, index, line=0, col=0):
+        super().__init__(line, col)
+        self.target = target
+        self.index = index
+
+@dataclass
 class FieldAccess(Node):
     object: Any
     field: str

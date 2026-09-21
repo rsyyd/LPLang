@@ -11,7 +11,8 @@ from .ast import (
     StructDecl, StructLit, FieldAccess,
     EnumDecl, MatchStmt, MatchArm,
     WildcardPattern, LitPattern, IdentPattern, VariantPattern,
-    ImportStmtStub
+    ImportStmtStub,
+    ListLit, IndexAccess
 )
 
 # Precedence table for binary operators (higher = tighter binding)
@@ -439,6 +440,20 @@ class Parser:
             self.advance()
             return BoolLit(tok.value == "true", tok.line, tok.column)
 
+        # List literal [1, 2, 3]
+        if tok.kind == "OP" and tok.value == "[":
+            self.advance()
+            elements = []
+            if not self.match("OP", "]"):
+                while True:
+                    elem = self.parse_expression()
+                    if elem:
+                        elements.append(elem)
+                    if not self.match("OP", ","):
+                        break
+                self.expect("OP", "]", hint="expected ']' to close list literal")
+            return self._parse_postfix(ListLit(elements, tok.line, tok.column))
+
         # Identifier or Call / Struct Literal / Field Access
         if tok.kind == "IDENT":
             ident_tok = self.advance()
@@ -472,49 +487,51 @@ class Parser:
                     return StructLit(ident_tok.value, fields, ident_tok.line, ident_tok.column)
 
             node = Ident(ident_tok.value, ident_tok.line, ident_tok.column)
-
-            # Postfix chain: .field or (args) or ::Variant
-            while True:
-                if self.current().kind == "OP" and self.current().value == ".":
-                    self.advance()
-                    field_tok = self.expect("IDENT", hint="expected field name after '.'")
-                    if not field_tok:
-                        break
-                    node = FieldAccess(node, field_tok.value, field_tok.line, field_tok.column)
-                elif self.current().kind == "OP" and (self.current().value == "::" or (self.current().value == ":" and self.peek().value == ":")):
-                    # Enum variant constructor or access: Option::Some(10)
-                    if not self.match("OP", "::"):
-                        self.advance() # :
-                        self.advance() # :
-                    vtok = self.expect("IDENT", hint="expected variant name after '::'")
-                    if not vtok:
-                        break
-                    node = Ident(f"{node.name}::{vtok.value}", node.line, node.col)
-                elif self.current().kind == "OP" and self.current().value == "(":
-                    self.advance()
-                    args = []
-                    if not self.match("OP", ")"):
-                        while True:
-                            arg = self.parse_expression()
-                            if arg:
-                                args.append(arg)
-                            if not self.match("OP", ","):
-                                break
-                        self.expect("OP", ")", hint="expected closing ')' in function call")
-                    node = Call(node, args, node.line, node.col)
-                else:
-                    break
-            
-            # Assignment check (only if not part of a chain yet? No, assignment target must be Ident or FieldAccess)
-            # But our loop already consumed dots/calls. 
-            # If node is Ident or FieldAccess, we can assign.
-            if isinstance(node, (Ident, FieldAccess)):
-                if self.match("OP", "="):
-                    val = self.parse_expression()
-                    return BinOp("=", node, val, node.line, node.col)
-            
-            return node
+            return self._parse_postfix(node)
 
         self.diags.error(f"unexpected token {tok.kind}:{tok.value}", tok.line, tok.column,
                          hint="expected expression (number, string, identifier, parentheses)")
         return None
+
+    def _parse_postfix(self, node):
+        while True:
+            if self.current().kind == "OP" and self.current().value == ".":
+                self.advance()
+                field_tok = self.expect("IDENT", hint="expected field name after '.'")
+                if not field_tok:
+                    break
+                node = FieldAccess(node, field_tok.value, field_tok.line, field_tok.column)
+            elif self.current().kind == "OP" and self.current().value == "[":
+                self.advance()
+                idx_expr = self.parse_expression()
+                self.expect("OP", "]", hint="expected ']' to close index")
+                node = IndexAccess(node, idx_expr, node.line, node.col)
+            elif self.current().kind == "OP" and (self.current().value == "::" or (self.current().value == ":" and self.peek().value == ":")):
+                if not self.match("OP", "::"):
+                    self.advance()
+                    self.advance()
+                vtok = self.expect("IDENT", hint="expected variant name after '::'")
+                if not vtok:
+                    break
+                node = Ident(f"{getattr(node, 'name', '')}::{vtok.value}", node.line, node.col)
+            elif self.current().kind == "OP" and self.current().value == "(":
+                self.advance()
+                args = []
+                if not self.match("OP", ")"):
+                    while True:
+                        arg = self.parse_expression()
+                        if arg:
+                            args.append(arg)
+                        if not self.match("OP", ","):
+                            break
+                    self.expect("OP", ")", hint="expected closing ')' in function call")
+                node = Call(node, args, node.line, node.col)
+            else:
+                break
+
+        if isinstance(node, (Ident, FieldAccess, IndexAccess)):
+            if self.match("OP", "="):
+                val = self.parse_expression()
+                return BinOp("=", node, val, node.line, node.col)
+
+        return node
