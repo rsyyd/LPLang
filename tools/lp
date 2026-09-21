@@ -2,13 +2,16 @@
 """LPLang Driver CLI (`lp`).
 
 Provides commands:
-  lp run <file.lp>     Execute an LPLang script
+  lp run <file.lp>     Execute an LPLang script (interpreter)
   lp check <file.lp>   Parse & validate syntax and report diagnostics
+  lp build <file.lp>   Compile to a native binary via C backend (EXPERIMENTAL)
   lp version           Print LPLang version
 """
 
 import sys
 import os
+import subprocess
+import tempfile
 
 # Ensure LPLang root is on sys.path
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,9 +23,22 @@ from compiler.typechecker import TypeChecker
 from compiler.interpreter import Interpreter, RuntimeError
 from compiler.loader import load_program
 from compiler.diagnostics import DiagnosticBag
+from compiler.codegen_c import CGenerator, CodegenError
 
 
-VERSION = "0.1.0-alpha.1"
+VERSION = "0.1.0-alpha.7"
+
+
+def _load_and_check(filepath, diags):
+    programs, _ = load_program(filepath, diags)
+    if diags.has_errors():
+        return None
+    tc = TypeChecker(diags)
+    for mod_name, prog in programs:
+        tc.check_program(prog)
+    if diags.has_errors():
+        return None
+    return programs
 
 
 def run_file(filepath):
@@ -31,19 +47,8 @@ def run_file(filepath):
         sys.exit(1)
 
     diags = DiagnosticBag()
-    programs, _ = load_program(filepath, diags)
-    if diags.has_errors():
-        with open(filepath, "r", encoding="utf-8") as f:
-            lines = f.read().splitlines()
-        print(diags.render_all(lines), file=sys.stderr)
-        sys.exit(1)
-
-    tc = TypeChecker(diags)
-    # Check all modules in dependency order
-    for mod_name, prog in programs:
-        tc.check_program(prog)
-
-    if diags.has_errors():
+    programs = _load_and_check(filepath, diags)
+    if programs is None:
         with open(filepath, "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
         print(diags.render_all(lines), file=sys.stderr)
@@ -51,7 +56,6 @@ def run_file(filepath):
 
     interp = Interpreter()
     try:
-        # Execute all imported modules first, then root
         for mod_name, prog in programs:
             interp.eval_program(prog)
     except RuntimeError as err:
@@ -65,12 +69,7 @@ def check_file(filepath):
         sys.exit(1)
 
     diags = DiagnosticBag()
-    programs, _ = load_program(filepath, diags)
-    if not diags.has_errors():
-        tc = TypeChecker(diags)
-        for mod_name, prog in programs:
-            tc.check_program(prog)
-
+    programs = _load_and_check(filepath, diags)
     if diags.has_errors():
         with open(filepath, "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
@@ -81,13 +80,70 @@ def check_file(filepath):
         print(f"Validation successful: '{filepath}' and its dependencies have no errors.")
 
 
+def build_file(filepath):
+    """EXPERIMENTAL: compile via C backend. Requires gcc/clang on PATH."""
+    if not os.path.exists(filepath):
+        print(f"Error: file '{filepath}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    cc = None
+    for candidate in ("gcc", "clang", "cc"):
+        try:
+            subprocess.run([candidate, "--version"], capture_output=True, check=True)
+            cc = candidate
+            break
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+    if cc is None:
+        print("Error: no C compiler found (tried gcc, clang, cc).", file=sys.stderr)
+        sys.exit(1)
+
+    diags = DiagnosticBag()
+    programs = _load_and_check(filepath, diags)
+    if programs is None:
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        print(diags.render_all(lines), file=sys.stderr)
+        sys.exit(1)
+
+    # The native backend is a spike: only the root program (last in list) is
+    # compiled; imports are NOT yet compiled into the binary.
+    root_prog = programs[-1][1]
+
+    gen = CGenerator()
+    try:
+        c_code = gen.generate(root_prog)
+    except CodegenError as e:
+        line = e.node.line if e.node else 0
+        col = e.node.col if e.node else 0
+        print(f"BuildError[{line}:{col}]: {e.message}", file=sys.stderr)
+        print("hint: run without 'build' (lp run) to execute via the interpreter instead.", file=sys.stderr)
+        sys.exit(1)
+
+    out_name = os.path.splitext(os.path.basename(filepath))[0]
+    out_path = os.path.abspath(out_name)
+    with tempfile.TemporaryDirectory() as tmp:
+        c_path = os.path.join(tmp, out_name + ".c")
+        with open(c_path, "w", encoding="utf-8") as f:
+            f.write(c_code)
+        result = subprocess.run([cc, "-O2", "-o", out_path, c_path],
+                                capture_output=True, text=True)
+        if result.returncode != 0:
+            print("C compiler reported errors:", file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
+            sys.exit(1)
+
+    print(f"Built native binary: {out_path}")
+
+
 def main():
     if len(sys.argv) < 2:
         print(f"LPLang {VERSION} Driver")
         print("Usage: lp <command> [arguments]")
         print("Commands:")
-        print("  run <file.lp>     Execute a .lp program")
+        print("  run <file.lp>     Execute a .lp program (interpreter)")
         print("  check <file.lp>   Validate syntax and diagnostics")
+        print("  build <file.lp>   Compile to native binary (EXPERIMENTAL)")
         print("  version           Display compiler version")
         sys.exit(0)
 
@@ -104,8 +160,13 @@ def main():
             print("Error: missing file argument for 'check'", file=sys.stderr)
             sys.exit(1)
         check_file(sys.argv[2])
+    elif cmd == "build":
+        if len(sys.argv) < 3:
+            print("Error: missing file argument for 'build'", file=sys.stderr)
+            sys.exit(1)
+        build_file(sys.argv[2])
     else:
-        print(f"Unknown command: '{cmd}'. Use 'run', 'check', or 'version'.", file=sys.stderr)
+        print(f"Unknown command: '{cmd}'. Use 'run', 'check', 'build', or 'version'.", file=sys.stderr)
         sys.exit(1)
 
 
