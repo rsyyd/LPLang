@@ -310,6 +310,23 @@ class TypeChecker:
             self.check_expr(expr.expr)
             return None
 
+        if kind == "MatchExpr":
+            target_t = self.check_expr(expr.target)
+            if target_t is None:
+                return None
+            result_types = []
+            for pattern, arm_expr in expr.arms:
+                self.push()
+                self.check_pattern(pattern, target_t)
+                arm_t = self.check_expr(arm_expr)
+                self.pop()
+                result_types.append(arm_t)
+            # All arms must agree on the result type (when known)
+            known = [t for t in result_types if t is not None]
+            if known and all(t == known[0] for t in known):
+                return known[0]
+            return known[0] if known else None
+
         if kind == "SpawnExpr":
             self.check_expr(expr.expr)
             return None

@@ -331,6 +331,17 @@ class Interpreter:
             # If not a task, return directly (idempotent await)
             return target
 
+        elif kind == "MatchExpr":
+            target_val = self.eval_expr(expr.target, env)
+            for pattern, arm_expr in expr.arms:
+                matched, bindings = self.match_pattern(pattern, target_val)
+                if matched:
+                    arm_env = Environment(env)
+                    for bname, bval in bindings.items():
+                        arm_env.define(bname, bval, mutable=True)
+                    return self.eval_expr(arm_expr, arm_env)
+            raise RuntimeError("match expression: no pattern matched", expr.line, expr.col)
+
         elif kind == "SpawnExpr":
             # Runs the expression in a background thread task.
             # If the expr already returns a Task (async fn call), return it directly.
