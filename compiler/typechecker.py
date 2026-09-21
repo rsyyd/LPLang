@@ -327,6 +327,25 @@ class TypeChecker:
                 return known[0]
             return known[0] if known else None
 
+        if kind == "TryExpr":
+            target_t = self.check_expr(expr.expr)
+            if target_t in ("Result", "Option"):
+                # Enclosing function must return the same enum type
+                if self.current_fn_ret is not None and self.current_fn_ret != target_t:
+                    self.diags.error(
+                        f"operator '?' on '{target_t}' inside function returning '{self.current_fn_ret}'",
+                        expr.line, expr.col,
+                        hint=f"the enclosing function must return '{target_t}' to use '?' with it")
+                # Look up payload type of Ok or Some
+                variants = self.enums.get(target_t, {})
+                ok_payloads = variants.get("Ok", variants.get("Some", []))
+                return ok_payloads[0] if ok_payloads else None
+            elif target_t is not None:
+                self.diags.error(
+                    f"operator '?' can only be used on Result or Option, got '{target_t}'",
+                    expr.line, expr.col)
+            return None
+
         if kind == "SpawnExpr":
             self.check_expr(expr.expr)
             return None

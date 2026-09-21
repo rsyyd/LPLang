@@ -342,6 +342,23 @@ class Interpreter:
                     return self.eval_expr(arm_expr, arm_env)
             raise RuntimeError("match expression: no pattern matched", expr.line, expr.col)
 
+        elif kind == "TryExpr":
+            val = self.eval_expr(expr.expr, env)
+            if isinstance(val, LPLangEnumVariant):
+                # Result::Err or Result::Ok
+                if val.enum_name == "Result":
+                    if val.variant_name == "Err":
+                        raise ReturnValue(val)  # early return Err
+                    elif val.variant_name == "Ok":
+                        return val.values[0] if val.values else None
+                # Option::None or Option::Some
+                if val.enum_name == "Option":
+                    if val.variant_name == "None":
+                        raise ReturnValue(val)  # early return None
+                    elif val.variant_name == "Some":
+                        return val.values[0] if val.values else None
+            raise RuntimeError("operator '?' can only be used on Result or Option values", expr.line, expr.col)
+
         elif kind == "SpawnExpr":
             # Runs the expression in a background thread task.
             # If the expr already returns a Task (async fn call), return it directly.

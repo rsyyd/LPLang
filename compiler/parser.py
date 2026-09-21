@@ -13,7 +13,8 @@ from .ast import (
     WildcardPattern, LitPattern, IdentPattern, VariantPattern,
     ImportStmtStub,
     ListLit, IndexAccess,
-    AsyncFnDecl, AwaitExpr, SpawnExpr
+    AsyncFnDecl, AwaitExpr, SpawnExpr,
+    TryExpr
 )
 
 # Precedence table for binary operators (higher = tighter binding)
@@ -578,6 +579,10 @@ class Parser:
                 if not field_tok:
                     break
                 node = FieldAccess(node, field_tok.value, field_tok.line, field_tok.column)
+            elif self.current().kind == "OP" and self.current().value == "?":
+                # Try operator: propagate Err/None from Result/Option
+                q_tok = self.advance()
+                node = TryExpr(node, q_tok.line, q_tok.column)
             elif self.current().kind == "OP" and self.current().value == "[":
                 self.advance()
                 idx_expr = self.parse_expression()
