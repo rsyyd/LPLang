@@ -48,6 +48,7 @@ class TypeChecker:
         self.scopes = [{}]          # stack of name -> (type, mutable)
         self.functions = {}         # name -> FnSignature
         self.structs = {}           # name -> dict[field_name, field_type]
+        self.enums = {}             # name -> dict[variant_name, list[payload_type]]
         self.current_fn_ret = None  # expected return type of enclosing fn
 
     # -- scope helpers --
@@ -75,13 +76,15 @@ class TypeChecker:
     # -- program --
 
     def is_valid_type(self, typ):
-        return typ in PRIMITIVES or typ in self.structs
+        return typ in PRIMITIVES or typ in self.structs or typ in self.enums
 
     def check_program(self, program):
-        # Pass 0: collect struct declarations
+        # Pass 0: collect struct and enum declarations
         for stmt in program.statements:
             if stmt.__class__.__name__ == "StructDecl":
                 self._register_struct(stmt)
+            elif stmt.__class__.__name__ == "EnumDecl":
+                self._register_enum(stmt)
 
         # Pass 1: collect function signatures (allows forward references)
         for stmt in program.statements:
@@ -91,6 +94,18 @@ class TypeChecker:
         # Pass 2: check bodies
         for stmt in program.statements:
             self.check_stmt(stmt)
+
+    def _register_enum(self, edecl):
+        if edecl.name in self.enums or edecl.name in self.structs or edecl.name in PRIMITIVES:
+            self.diags.error(f"duplicate type definition '{edecl.name}'", edecl.line, edecl.col)
+            return
+        vmap = {}
+        for vname, payloads in edecl.variants:
+            for p in payloads:
+                if not self.is_valid_type(p):
+                    self.diags.error(f"unknown payload type '{p}' in enum '{edecl.name}'", edecl.line, edecl.col)
+            vmap[vname] = payloads
+        self.enums[edecl.name] = vmap
 
     def _register_struct(self, sdecl):
         if sdecl.name in self.structs or sdecl.name in PRIMITIVES:
@@ -163,6 +178,18 @@ class TypeChecker:
             for s in stmt.body:
                 self.check_stmt(s)
             self.pop()
+        elif kind == "MatchStmt":
+            target_t = self.check_expr(stmt.target)
+            if target_t is None:
+                return
+            # For now, we just check each arm's pattern and body
+            # We don't do exhaustiveness checking yet.
+            for arm in stmt.arms:
+                self.push()
+                self.check_pattern(arm.pattern, target_t)
+                for s in arm.body:
+                    self.check_stmt(s)
+                self.pop()
         elif kind == "ExprStmt":
             self.check_expr(stmt.expr)
 
@@ -215,6 +242,45 @@ class TypeChecker:
         # TODO: missing-return-path analysis (function with declared non-None
         # return type but some path falls off the end) is NOT yet detected.
 
+    def check_pattern(self, pattern, expected_type):
+        pkind = pattern.__class__.__name__
+        if pkind == "WildcardPattern":
+            return
+        if pkind == "LitPattern":
+            lit_type = _LIT_TYPES.get(pattern.value.__class__.__name__)
+            if lit_type is not None and expected_type != lit_type:
+                self.diags.error(f"literal pattern type '{lit_type}' does not match expected type '{expected_type}'",
+                                 pattern.line, pattern.col)
+            return
+        if pkind == "IdentPattern":
+            # Bind the variable to the expected type
+            self.declare(pattern.name, expected_type, mutable=True, line=pattern.line, col=pattern.col)
+            return
+        if pkind == "VariantPattern":
+            if expected_type not in self.enums:
+                self.diags.error(f"pattern expects enum type, got '{expected_type}'",
+                                 pattern.line, pattern.col)
+                return
+            enum_variants = self.enums[expected_type]
+            if pattern.enum_name is not None and pattern.enum_name != expected_type:
+                self.diags.error(f"pattern enum name '{pattern.enum_name}' does not match target enum '{expected_type}'",
+                                 pattern.line, pattern.col)
+                return
+            if pattern.variant_name not in enum_variants:
+                self.diags.error(f"enum '{expected_type}' has no variant '{pattern.variant_name}'",
+                                 pattern.line, pattern.col)
+                return
+            payload_types = enum_variants[pattern.variant_name]
+            if len(pattern.sub_patterns) != len(payload_types):
+                self.diags.error(f"variant '{pattern.variant_name}' expects {len(payload_types)} payload(s), got {len(pattern.sub_patterns)}",
+                                 pattern.line, pattern.col)
+                return
+            for sub_p, ptype in zip(pattern.sub_patterns, payload_types):
+                self.check_pattern(sub_p, ptype)
+            return
+        # Unknown pattern type
+        return
+
     # -- expressions --
 
     def check_expr(self, expr):
@@ -225,11 +291,30 @@ class TypeChecker:
             return _LIT_TYPES[kind]
 
         if kind == "Ident":
+            # First, check if it's a variable or function in scope
             entry = self.lookup(expr.name)
-            if entry is None:
-                self.diags.error(f"undefined variable '{expr.name}'", expr.line, expr.col)
-                return None
-            return entry[0]
+            if entry is not None:
+                return entry[0]
+            # If not found, check if it's an enum variant constructor (or unit variant)
+            # Format: VariantName or EnumName::VariantName
+            if "::" in expr.name:
+                enum_name, variant_name = expr.name.split("::", 1)
+                if enum_name in self.enums and variant_name in self.enums[enum_name]:
+                    # It's a variant constructor (or value)
+                    payload_types = self.enums[enum_name][variant_name]
+                    if len(payload_types) == 0:
+                        # Unit variant: it's a value of the enum type
+                        return enum_name
+                    else:
+                        # It's a constructor function: takes payload_types and returns enum_name
+                        # We don't return a type here because it's a function; the call will be handled in _check_call
+                        # For now, we can return None and let _check_call handle it, or we can return a special marker.
+                        # Simpler: return None and let _check_call fail if not handled.
+                        return None
+            # Also check for unit variant without enum prefix (if the enum is in scope? Not typical)
+            # We'll leave it as undefined.
+            self.diags.error(f"undefined variable or enum variant '{expr.name}'", expr.line, expr.col)
+            return None
 
         if kind == "UnaryOp":
             t = self.check_expr(expr.operand)
@@ -374,6 +459,23 @@ class TypeChecker:
         if expr.func.__class__.__name__ != "Ident":
             return None
         name = expr.func.name
+
+        # Check if it's an enum variant constructor: EnumName::VariantName
+        if "::" in name:
+            enum_name, variant_name = name.split("::", 1)
+            if enum_name in self.enums and variant_name in self.enums[enum_name]:
+                payload_types = self.enums[enum_name][variant_name]
+                if len(expr.args) != len(payload_types):
+                    self.diags.error(
+                        f"enum constructor '{name}' expects {len(payload_types)} argument(s), got {len(expr.args)}",
+                        expr.line, expr.col)
+                for i, (arg, expected) in enumerate(zip(expr.args, payload_types)):
+                    at = self.check_expr(arg)
+                    if at is not None and at != expected:
+                        self.diags.error(
+                            f"argument {i + 1} of '{name}': expected '{expected}', got '{at}'",
+                            arg.line, arg.col)
+                return enum_name  # constructor returns the enum type
 
         # Builtins
         if name in ("print", "println"):

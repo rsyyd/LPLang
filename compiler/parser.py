@@ -8,7 +8,9 @@ from .diagnostics import DiagnosticBag
 from .ast import (
     Program, FnDecl, LetStmt, ReturnStmt, IfStmt, WhileStmt, ExprStmt,
     IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr,
-    StructDecl, StructLit, FieldAccess
+    StructDecl, StructLit, FieldAccess,
+    EnumDecl, MatchStmt, MatchArm,
+    WildcardPattern, LitPattern, IdentPattern, VariantPattern
 )
 
 # Precedence table for binary operators (higher = tighter binding)
@@ -105,6 +107,10 @@ class Parser:
                 return self.parse_fn_decl()
             elif tok.value == "struct":
                 return self.parse_struct_decl()
+            elif tok.value == "enum":
+                return self.parse_enum_decl()
+            elif tok.value == "match":
+                return self.parse_match_stmt()
             elif tok.value == "return":
                 return self.parse_return()
             elif tok.value == "if":
@@ -167,6 +173,120 @@ class Parser:
         
         self.expect("OP", "}", hint="close struct body with '}'")
         return StructDecl(ident.value, fields, kw.line, kw.column)
+
+    def parse_enum_decl(self):
+        kw = self.advance()  # consume 'enum'
+        ident = self.expect("IDENT", hint="provide enum name after 'enum'")
+        if not ident:
+            return None
+
+        self.expect("OP", "{", hint="open enum body with '{'")
+        variants = []
+        while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+            vname = self.expect("IDENT", hint="expected variant name")
+            if not vname:
+                break
+            payloads = []
+            if self.match("OP", "("):
+                if not self.match("OP", ")"):
+                    while True:
+                        ptype = self.expect("IDENT", hint="expected payload type name")
+                        if ptype:
+                            payloads.append(ptype.value)
+                        if not self.match("OP", ","):
+                            break
+                    self.expect("OP", ")", hint="expected closing ')' after variant payload types")
+            variants.append((vname.value, payloads))
+            self.match("OP", ",")
+        
+        self.expect("OP", "}", hint="close enum body with '}'")
+        return EnumDecl(ident.value, variants, kw.line, kw.column)
+
+    def parse_match_stmt(self):
+        kw = self.advance()  # consume 'match'
+        target = self.parse_expression()
+        self.expect("OP", "{", hint="expected '{' after match target")
+        arms = []
+        while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+            pattern = self.parse_pattern()
+            self.expect("OP", "=>", hint="expected '=>' after match pattern")
+            body = []
+            if self.match("OP", "{"):
+                while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+                    stmt = self.parse_statement()
+                    if stmt:
+                        body.append(stmt)
+                self.expect("OP", "}", hint="expected '}' to close arm block")
+            else:
+                stmt = self.parse_statement()
+                if stmt:
+                    body.append(stmt)
+            self.match("OP", ",")
+            arms.append(MatchArm(pattern, body, pattern.line, pattern.col))
+
+        self.expect("OP", "}", hint="expected '}' to close match body")
+        return MatchStmt(target, arms, kw.line, kw.column)
+
+    def parse_pattern(self):
+        tok = self.current()
+        # Wildcard _
+        if tok.kind == "IDENT" and tok.value == "_":
+            self.advance()
+            return WildcardPattern(tok.line, tok.column)
+
+        # Literals (int, float, string, bool)
+        if tok.kind == "INT":
+            self.advance()
+            return LitPattern(int(tok.value), tok.line, tok.column)
+        if tok.kind == "FLOAT":
+            self.advance()
+            return LitPattern(float(tok.value), tok.line, tok.column)
+        if tok.kind == "STRING":
+            self.advance()
+            return LitPattern(tok.value, tok.line, tok.column)
+        if tok.kind == "KEYWORD" and tok.value in ("true", "false"):
+            self.advance()
+            return LitPattern(tok.value == "true", tok.line, tok.column)
+
+        # Identifier or Enum::Variant(...) or Variant(...)
+        if tok.kind == "IDENT":
+            first = self.advance()
+            enum_name = None
+            var_name = first.value
+            if self.match("OP", "::") or (self.current().kind == "OP" and self.current().value == ":" and self.peek().value == ":"):
+                # Handle double colon (either single token or two colons)
+                if not self.match("OP", "::"):
+                    self.advance() # :
+                    self.advance() # :
+                enum_name = first.value
+                vtok = self.expect("IDENT", hint="expected variant name after '::'")
+                if vtok:
+                    var_name = vtok.value
+
+            # Payload patterns: Variant(p1, p2)
+            if self.match("OP", "("):
+                sub_patterns = []
+                if not self.match("OP", ")"):
+                    while True:
+                        sub_pat = self.parse_pattern()
+                        if sub_pat:
+                            sub_patterns.append(sub_pat)
+                        if not self.match("OP", ","):
+                            break
+                    self.expect("OP", ")", hint="expected ')' after variant pattern arguments")
+                return VariantPattern(enum_name, var_name, sub_patterns, first.line, first.column)
+
+            # If it starts with uppercase and has enum_name or is capital, treat as unit variant
+            if enum_name is not None or var_name[0].isupper():
+                return VariantPattern(enum_name, var_name, [], first.line, first.column)
+
+            # Otherwise it's a variable binding pattern
+            return IdentPattern(var_name, first.line, first.column)
+
+        self.diags.error(f"unexpected token in pattern: {tok.kind}:{tok.value}", tok.line, tok.column,
+                         hint="expected identifier, literal, or variant pattern")
+        self.advance()
+        return WildcardPattern(tok.line, tok.column)
 
     def parse_fn_decl(self):
         kw = self.advance()
@@ -342,7 +462,7 @@ class Parser:
 
             node = Ident(ident_tok.value, ident_tok.line, ident_tok.column)
 
-            # Postfix chain: .field or (args)
+            # Postfix chain: .field or (args) or ::Variant
             while True:
                 if self.current().kind == "OP" and self.current().value == ".":
                     self.advance()
@@ -350,6 +470,15 @@ class Parser:
                     if not field_tok:
                         break
                     node = FieldAccess(node, field_tok.value, field_tok.line, field_tok.column)
+                elif self.current().kind == "OP" and (self.current().value == "::" or (self.current().value == ":" and self.peek().value == ":")):
+                    # Enum variant constructor or access: Option::Some(10)
+                    if not self.match("OP", "::"):
+                        self.advance() # :
+                        self.advance() # :
+                    vtok = self.expect("IDENT", hint="expected variant name after '::'")
+                    if not vtok:
+                        break
+                    node = Ident(f"{node.name}::{vtok.value}", node.line, node.col)
                 elif self.current().kind == "OP" and self.current().value == "(":
                     self.advance()
                     args = []

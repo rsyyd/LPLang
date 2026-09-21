@@ -216,6 +216,75 @@ class StructDecl(Node):
         self.name = name
         self.fields = fields
 
+@dataclass
+class EnumDecl(Node):
+    name: str
+    variants: list        # list of (variant_name, list_of_payload_types)
+    line: int = 0
+    col: int = 0
+    def __init__(self, name, variants, line=0, col=0):
+        super().__init__(line, col)
+        self.name = name
+        self.variants = variants
+
+# ---- Pattern Matching ----
+
+class Pattern(Node):
+    """Marker base class for patterns (not a dataclass: has no fields)."""
+    pass
+
+@dataclass
+class WildcardPattern(Pattern):
+    def __init__(self, line=0, col=0):
+        super().__init__(line, col)
+
+@dataclass
+class LitPattern(Pattern):
+    value: Any
+    def __init__(self, value, line=0, col=0):
+        super().__init__(line, col)
+        self.value = value
+
+@dataclass
+class IdentPattern(Pattern):
+    name: str
+    def __init__(self, name, line=0, col=0):
+        super().__init__(line, col)
+        self.name = name
+
+@dataclass
+class VariantPattern(Pattern):
+    enum_name: Optional[str]
+    variant_name: str
+    sub_patterns: list
+    def __init__(self, enum_name, variant_name, sub_patterns, line=0, col=0):
+        super().__init__(line, col)
+        self.enum_name = enum_name
+        self.variant_name = variant_name
+        self.sub_patterns = sub_patterns
+
+@dataclass
+class MatchArm(Node):
+    pattern: Any
+    body: list            # list of statements
+    line: int = 0
+    col: int = 0
+    def __init__(self, pattern, body, line=0, col=0):
+        super().__init__(line, col)
+        self.pattern = pattern
+        self.body = body
+
+@dataclass
+class MatchStmt(Node):
+    target: Any
+    arms: list            # list of MatchArm
+    line: int = 0
+    col: int = 0
+    def __init__(self, target, arms, line=0, col=0):
+        super().__init__(line, col)
+        self.target = target
+        self.arms = arms
+
 
 # ---- Top level ----
 
