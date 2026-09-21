@@ -7,6 +7,10 @@ Follows LPLang semantics:
 - Built-in functions: print(), println(), assert()
 """
 
+import time
+import threading
+
+
 class ReturnValue(Exception):
     def __init__(self, value):
         self.value = value
@@ -18,6 +22,38 @@ class RuntimeError(Exception):
         self.message = message
         self.line = line
         self.col = col
+
+
+class Task:
+    """Represents an asynchronous computation running or resolved."""
+    def __init__(self, fn_or_val=None):
+        self.result_val = None
+        self.error = None
+        self.completed = threading.Event()
+        if fn_or_val is not None:
+            def runner():
+                try:
+                    self.result_val = fn_or_val()
+                except ReturnValue as ret:
+                    self.result_val = ret.value
+                except Exception as err:
+                    self.error = err
+                finally:
+                    self.completed.set()
+            self.thread = threading.Thread(target=runner, daemon=True)
+            self.thread.start()
+        else:
+            self.completed.set()
+
+    def wait(self):
+        self.completed.wait()
+        if self.error:
+            raise self.error
+        return self.result_val
+
+    def __repr__(self):
+        status = "completed" if self.completed.is_set() else "pending"
+        return f"<Task status={status}>"
 
 
 class Environment:
@@ -123,11 +159,18 @@ class Interpreter:
             lst.append(val)
             return None
 
+        def _sleep(ms):
+            if not isinstance(ms, (int, float)):
+                raise RuntimeError("sleep() requires a number in milliseconds")
+            time.sleep(ms / 1000.0)
+            return None
+
         self.globals.define("println", _println)
         self.globals.define("print", _print)
         self.globals.define("assert", _assert)
         self.globals.define("len", _len)
         self.globals.define("append", _append)
+        self.globals.define("sleep", _sleep)
 
     def eval_program(self, program):
         last_val = None
@@ -145,6 +188,10 @@ class Interpreter:
 
         elif kind == "FnDecl":
             # Store function closure in environment
+            env.define(stmt.name, stmt, mutable=False)
+            return None
+
+        elif kind == "AsyncFnDecl":
             env.define(stmt.name, stmt, mutable=False)
             return None
 
@@ -277,6 +324,26 @@ class Interpreter:
         elif kind == "ListLit":
             return [self.eval_expr(e, env) for e in expr.elements]
 
+        elif kind == "AwaitExpr":
+            target = self.eval_expr(expr.expr, env)
+            if isinstance(target, Task):
+                return target.wait()
+            # If not a task, return directly (idempotent await)
+            return target
+
+        elif kind == "SpawnExpr":
+            # Runs the expression in a background thread task.
+            # If the expr already returns a Task (async fn call), return it directly.
+            def task_work():
+                return self.eval_expr(expr.expr, env)
+            result = task_work()
+            if isinstance(result, Task):
+                return result
+            # For non-async, wrap in a completed task
+            t = Task()
+            t.result_val = result
+            return t
+
         elif kind == "IndexAccess":
             target = self.eval_expr(expr.target, env)
             index = self.eval_expr(expr.index, env)
@@ -346,8 +413,8 @@ class Interpreter:
             if callable(fn):
                 return fn(*args)
 
-            # User-defined FnDecl
-            if fn.__class__.__name__ == "FnDecl":
+            # User-defined FnDecl or AsyncFnDecl
+            if fn.__class__.__name__ in ("FnDecl", "AsyncFnDecl"):
                 if len(args) != len(fn.params):
                     raise RuntimeError(
                         f"function '{fn.name}' expects {len(fn.params)} args, got {len(args)}",
@@ -356,13 +423,19 @@ class Interpreter:
                 fn_env = Environment(self.globals)
                 for (param_name, _), arg_val in zip(fn.params, args):
                     fn_env.define(param_name, arg_val, mutable=True)
-                
-                try:
-                    for s in fn.body:
-                        self.exec_stmt(s, fn_env)
-                except ReturnValue as ret:
-                    return ret.value
-                return None
+
+                def run_body():
+                    try:
+                        for s in fn.body:
+                            self.exec_stmt(s, fn_env)
+                    except ReturnValue as ret:
+                        return ret.value
+                    return None
+
+                if fn.__class__.__name__ == "AsyncFnDecl":
+                    return Task(run_body)
+                else:
+                    return run_body()
 
             raise RuntimeError(f"'{expr.func.name}' is not callable", expr.line, expr.col)
 

@@ -315,6 +315,40 @@ class ImportStmtStub(Node):
         self.module_name = module_name
 
 
+@dataclass
+class AsyncFnDecl(Node):
+    name: str
+    params: list
+    ret_type: Optional[str]
+    body: list
+    line: int = 0
+    col: int = 0
+    def __init__(self, name, params, ret_type, body, line=0, col=0):
+        super().__init__(line, col)
+        self.name = name
+        self.params = params
+        self.ret_type = ret_type
+        self.body = body
+
+@dataclass
+class AwaitExpr(Node):
+    expr: Any
+    line: int = 0
+    col: int = 0
+    def __init__(self, expr, line=0, col=0):
+        super().__init__(line, col)
+        self.expr = expr
+
+@dataclass
+class SpawnExpr(Node):
+    expr: Any
+    line: int = 0
+    col: int = 0
+    def __init__(self, expr, line=0, col=0):
+        super().__init__(line, col)
+        self.expr = expr
+
+
 # ---- Top level ----
 
 @dataclass

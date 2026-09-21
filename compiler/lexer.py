@@ -20,6 +20,7 @@ KEYWORDS = {
     "let", "var", "fn", "return", "if", "else", "while", "for", "in",
     "break", "continue", "true", "false", "struct", "enum", "match",
     "import", "export", "and", "or", "not",
+    "async", "await", "spawn",
 }
 
 # Two-character operators checked before single-character ones.
