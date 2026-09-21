@@ -25,7 +25,7 @@ from .ast import (
     IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr
 )
 
-PRIMITIVES = {"int", "float", "string", "bool"}
+PRIMITIVES = {"int", "float", "string", "bool", "list"}
 
 # Map AST literal/expr class name -> static type
 _LIT_TYPES = {
@@ -290,6 +290,19 @@ class TypeChecker:
         if kind in _LIT_TYPES:
             return _LIT_TYPES[kind]
 
+        if kind == "ListLit":
+            for e in expr.elements:
+                self.check_expr(e)
+            return "list"
+
+        if kind == "IndexAccess":
+            t = self.check_expr(expr.target)
+            idx_t = self.check_expr(expr.index)
+            if idx_t is not None and idx_t != "int":
+                self.diags.error(f"index must be int, got '{idx_t}'", expr.index.line, expr.index.col)
+            # ponytail: returns None (element type unknown without generics); upgrade when generic list<T> is added.
+            return None
+
         if kind == "Ident":
             # First, check if it's a variable or function in scope
             entry = self.lookup(expr.name)
@@ -386,8 +399,16 @@ class TypeChecker:
         op = expr.op
 
         if op == "=":
-            # Assignment: left must be a mutable variable
-            if expr.left.__class__.__name__ != "Ident":
+            # Assignment: left must be a mutable variable or index access
+            left_kind = expr.left.__class__.__name__
+            if left_kind == "IndexAccess":
+                self.check_expr(expr.left.target)
+                idx_t = self.check_expr(expr.left.index)
+                if idx_t is not None and idx_t != "int":
+                    self.diags.error(f"index must be int, got '{idx_t}'", expr.left.index.line, expr.left.index.col)
+                self.check_expr(expr.right)
+                return None
+            if left_kind != "Ident":
                 self.diags.error("invalid assignment target", expr.line, expr.col)
                 return None
             entry = self.lookup(expr.left.name)
@@ -481,6 +502,19 @@ class TypeChecker:
         if name in ("print", "println"):
             for a in expr.args:
                 self.check_expr(a)
+            return None
+        if name == "len":
+            if len(expr.args) != 1:
+                self.diags.error("len takes exactly 1 argument", expr.line, expr.col)
+            else:
+                self.check_expr(expr.args[0])
+            return "int"
+        if name == "append":
+            if len(expr.args) != 2:
+                self.diags.error("append takes exactly 2 arguments", expr.line, expr.col)
+            else:
+                self.check_expr(expr.args[0])
+                self.check_expr(expr.args[1])
             return None
         if name == "assert":
             if len(expr.args) < 1 or len(expr.args) > 2:

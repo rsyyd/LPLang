@@ -112,9 +112,22 @@ class Interpreter:
                 raise RuntimeError(f"assert failed: {msg}")
             return True
 
+        def _len(val):
+            if isinstance(val, (list, str)):
+                return len(val)
+            raise RuntimeError("len() requires a list or string")
+
+        def _append(lst, val):
+            if not isinstance(lst, list):
+                raise RuntimeError("append() requires a list")
+            lst.append(val)
+            return None
+
         self.globals.define("println", _println)
         self.globals.define("print", _print)
         self.globals.define("assert", _assert)
+        self.globals.define("len", _len)
+        self.globals.define("append", _append)
 
     def eval_program(self, program):
         last_val = None
@@ -261,13 +274,47 @@ class Interpreter:
                 raise RuntimeError(f"struct '{obj.type_name}' has no field '{expr.field}'", expr.line, expr.col)
             return obj.fields[expr.field]
 
+        elif kind == "ListLit":
+            return [self.eval_expr(e, env) for e in expr.elements]
+
+        elif kind == "IndexAccess":
+            target = self.eval_expr(expr.target, env)
+            index = self.eval_expr(expr.index, env)
+            if isinstance(target, list):
+                if not isinstance(index, int):
+                    raise RuntimeError("list index must be int", expr.line, expr.col)
+                if index < 0 or index >= len(target):
+                    raise RuntimeError(f"list index out of bounds: {index}", expr.line, expr.col)
+                return target[index]
+            elif isinstance(target, str):
+                if not isinstance(index, int):
+                    raise RuntimeError("string index must be int", expr.line, expr.col)
+                if index < 0 or index >= len(target):
+                    raise RuntimeError(f"string index out of bounds: {index}", expr.line, expr.col)
+                return target[index]
+            else:
+                raise RuntimeError("index access only supported on list and string", expr.line, expr.col)
+
         elif kind == "BinOp":
             if expr.op == "=":
-                if expr.left.__class__.__name__ != "Ident":
-                    raise RuntimeError("invalid assignment target", expr.line, expr.col)
                 val = self.eval_expr(expr.right, env)
-                env.assign(expr.left.name, val, expr.line, expr.col)
-                return val
+                left_kind = expr.left.__class__.__name__
+                if left_kind == "Ident":
+                    env.assign(expr.left.name, val, expr.line, expr.col)
+                    return val
+                elif left_kind == "IndexAccess":
+                    target = self.eval_expr(expr.left.target, env)
+                    index = self.eval_expr(expr.left.index, env)
+                    if isinstance(target, list):
+                        if not isinstance(index, int):
+                            raise RuntimeError("list index must be int", expr.line, expr.col)
+                        if index < 0 or index >= len(target):
+                            raise RuntimeError(f"list index out of bounds: {index}", expr.line, expr.col)
+                        target[index] = val
+                        return val
+                    raise RuntimeError("index assignment only supported on lists", expr.line, expr.col)
+                else:
+                    raise RuntimeError("invalid assignment target", expr.line, expr.col)
 
             l = self.eval_expr(expr.left, env)
             r = self.eval_expr(expr.right, env)
