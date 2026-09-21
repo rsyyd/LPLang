@@ -79,7 +79,23 @@ match expr {
   wildcard/fallthrough arm that matches nothing falls through silently;
   this is a known limitation, to be made a compile error).
 
-### 2.5 Bindings & Mutability
+### 2.5 Concurrency (async/await/spawn)
+EXPERIMENTAL — Stage 0 semantics:
+- `async fn name(...) -> T { ... }` declares an asynchronous function.
+- Calling an `async fn` starts a Task (background thread) and returns a
+  Task handle immediately.
+- `await expr` waits for a Task and yields its result. Awaiting a
+  non-Task value returns the value unchanged.
+- `spawn expr` runs `expr` concurrently and returns a Task handle.
+  Spawning an async fn call returns that call's Task directly.
+- `sleep(ms)` blocks the current thread (thread-based concurrency; not
+  an event loop).
+- Error propagation: exceptions inside a Task are re-raised at the
+  `await` site, not at spawn time.
+- Result types of await/spawn are currently unchecked by the type
+  checker (no async generics yet); tasks are untyped handles.
+
+### 2.6 Bindings & Mutability
 - `let name [: type] = expr;`: immutable binding. Reassignment is a compile-time (and runtime) error.
 - `var name [: type] = expr;`: mutable binding. Reassignment allowed with matching type.
 - If type annotation is omitted, the type is statically inferred from the initializer.
