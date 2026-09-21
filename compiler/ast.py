@@ -360,6 +360,15 @@ class MatchExpr(Node):
         self.target = target
         self.arms = arms
 
+@dataclass
+class TryExpr(Node):
+    expr: Any
+    line: int = 0
+    col: int = 0
+    def __init__(self, expr, line=0, col=0):
+        super().__init__(line, col)
+        self.expr = expr
+
 
 # ---- Top level ----
 
