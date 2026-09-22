@@ -120,6 +120,9 @@ class TypeChecker:
         self.structs[sdecl.name] = fields
 
     def _register_fn(self, fn):
+        # Collect type params from generic functions
+        tparams = getattr(fn, 'type_params', []) or []
+
         params = []
         for pname, ptype in fn.params:
             if ptype is None:
@@ -128,21 +131,23 @@ class TypeChecker:
                     fn.line, fn.col,
                     hint="write e.g. fn f(x: int) so calls can be type-checked")
                 params.append((pname, None))
-            elif not self.is_valid_type(ptype):
+            elif not self.is_valid_type(ptype) and ptype not in tparams:
                 self.diags.error(f"unknown type '{ptype}' for parameter '{pname}'",
                                  fn.line, fn.col)
                 params.append((pname, None))
             else:
                 params.append((pname, ptype))
 
-        if fn.ret_type is not None and not self.is_valid_type(fn.ret_type):
+        if fn.ret_type is not None and not self.is_valid_type(fn.ret_type) and fn.ret_type not in tparams:
             self.diags.error(f"unknown return type '{fn.ret_type}' for function '{fn.name}'",
                              fn.line, fn.col)
             ret = None
         else:
             ret = fn.ret_type
 
-        self.functions[fn.name] = FnSignature(params, ret)
+        sig = FnSignature(params, ret)
+        sig.type_params = tparams
+        self.functions[fn.name] = sig
 
     # -- statements --
 
@@ -606,15 +611,37 @@ class TypeChecker:
                                  expr.line, expr.col)
             return None
 
+        # Check argument count
         if len(expr.args) != len(sig.params):
             self.diags.error(
                 f"function '{name}' expects {len(sig.params)} argument(s), got {len(expr.args)}",
                 expr.line, expr.col)
-        for i, arg in enumerate(expr.args):
-            at = self.check_expr(arg)
-            if i < len(sig.params) and sig.params[i][1] is not None \
-                    and at is not None and at != sig.params[i][1]:
+        # Infer type parameters and substitute
+        type_map = {}
+        for (pname, ptype), arg_expr in zip(sig.params, expr.args):
+            at = self.check_expr(arg_expr)
+            if ptype is not None and not self.is_valid_type(ptype) and ptype in sig.type_params:
+                # This is a type parameter, infer from argument
+                if at is not None:
+                    type_map[ptype] = at
+            elif at is not None and ptype is not None and at != ptype:
                 self.diags.error(
-                    f"argument {i + 1} of '{name}': expected '{sig.params[i][1]}', got '{at}'",
-                    arg.line, arg.col)
-        return sig.ret_type
+                    f"argument mismatch: expected type '{ptype}', got '{at}'",
+                    arg_expr.line, arg_expr.col)
+        # Substitute return type
+        ret_type = sig.ret_type
+        if ret_type is not None and ret_type in type_map:
+            ret_type = type_map[ret_type]
+        # Check arguments with substitution (for non-type-param types)
+        for i, (pname, ptype) in enumerate(sig.params):
+            if ptype is not None and not self.is_valid_type(ptype) and ptype in sig.type_params:
+                # Skip type parameters, already handled above
+                continue
+            at = self.check_expr(expr.args[i])
+            if ptype is not None and ptype in type_map:
+                ptype = type_map[ptype]
+            if at is not None and ptype is not None and at != ptype:
+                self.diags.error(
+                    f"argument {i + 1} of '{name}': expected type '{ptype}', got '{at}'",
+                    expr.args[i].line, expr.args[i].col)
+        return ret_type

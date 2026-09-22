@@ -368,6 +368,18 @@ class Parser:
         if not ident:
             return None
 
+        # Parse generic type parameters: fn name<T, U>(...)
+        type_params = []
+        if self.match("OP", "<"):
+            if not self.match("OP", ">"):
+                while True:
+                    tname = self.expect("IDENT", hint="expected type parameter name")
+                    if tname:
+                        type_params.append(tname.value)
+                    if not self.match("OP", ","):
+                        break
+                self.expect("OP", ">", hint="close generic type parameters with '>'")
+
         self.expect("OP", "(", hint="open parameter list with '('")
         params = []
         if not self.match("OP", ")"):
@@ -398,7 +410,7 @@ class Parser:
                 body.append(stmt)
         self.expect("OP", "}", hint="close function body with '}'")
 
-        return FnDecl(ident.value, params, ret_type, body, kw.line, kw.column)
+        return FnDecl(ident.value, params, ret_type, body, type_params, kw.line, kw.column)
 
     def parse_return(self):
         kw = self.advance()
