@@ -215,14 +215,16 @@ class FnDecl(Node):
     name: str
     params: list          # list of (name, type_ann) tuples
     ret_type: Optional[str]
+    type_params: list     # list of type parameter names
     body: list            # list of statements
     line: int = 0
     col: int = 0
-    def __init__(self, name, params, ret_type, body, line=0, col=0):
+    def __init__(self, name, params, ret_type, body, type_params=None, line=0, col=0):
         super().__init__(line, col)
         self.name = name
         self.params = params
         self.ret_type = ret_type
+        self.type_params = type_params or []
         self.body = body
 
 @dataclass
