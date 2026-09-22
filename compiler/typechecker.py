@@ -182,14 +182,30 @@ class TypeChecker:
             target_t = self.check_expr(stmt.target)
             if target_t is None:
                 return
-            # For now, we just check each arm's pattern and body
-            # We don't do exhaustiveness checking yet.
+            has_wildcard = False
+            covered_variants = set()
             for arm in stmt.arms:
                 self.push()
                 self.check_pattern(arm.pattern, target_t)
                 for s in arm.body:
                     self.check_stmt(s)
                 self.pop()
+                pk = arm.pattern.__class__.__name__
+                if pk == "WildcardPattern":
+                    has_wildcard = True
+                elif pk == "IdentPattern":
+                    has_wildcard = True  # ident binds anything = catch-all
+                elif pk == "VariantPattern":
+                    covered_variants.add(arm.pattern.variant_name)
+            # Exhaustiveness check for enums
+            if target_t in self.enums and not has_wildcard:
+                all_variants = set(self.enums[target_t].keys())
+                missing = all_variants - covered_variants
+                if missing:
+                    self.diags.error(
+                        f"match on '{target_t}' is not exhaustive: missing variant(s) {', '.join(sorted(missing))}",
+                        stmt.line, stmt.col,
+                        hint="add arms for the missing variants or a '_' wildcard")
         elif kind == "ExprStmt":
             self.check_expr(stmt.expr)
 
