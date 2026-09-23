@@ -6,7 +6,7 @@ Collects diagnostics into DiagnosticBag rather than crashing on syntax errors.
 
 from .diagnostics import DiagnosticBag
 from .ast import (
-    Program, FnDecl, LetStmt, ReturnStmt, IfStmt, WhileStmt, ExprStmt,
+    Program, FnDecl, LetStmt, ReturnStmt, ForInStmt, IfStmt, WhileStmt, ExprStmt,
     IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr,
     StructDecl, StructLit, FieldAccess,
     EnumDecl, MatchStmt, MatchArm, MatchExpr,
@@ -19,6 +19,7 @@ from .ast import (
 
 # Precedence table for binary operators (higher = tighter binding)
 PRECEDENCE = {
+    "..": 0,
     "or": 1,
     "||": 1,
     "and": 2,
@@ -123,6 +124,8 @@ class Parser:
                 return self.parse_if_stmt()
             elif tok.value == "while":
                 return self.parse_while_stmt()
+            elif tok.value == "for":
+                return self.parse_for_in_stmt()
             elif tok.value == "async":
                 return self.parse_async_fn_decl()
 
@@ -472,6 +475,22 @@ class Parser:
                 body.append(stmt)
         self.expect("OP", "}", hint="expected '}' to close while block")
         return WhileStmt(cond, body, kw.line, kw.column)
+
+    def parse_for_in_stmt(self):
+        kw = self.advance()  # consume 'for'
+        var = self.expect("IDENT", hint="expected variable name after 'for'")
+        if not var:
+            return None
+        self.expect("KEYWORD", "in", hint="expected 'in' after variable name")
+        coll = self.parse_expression()
+        self.expect("OP", "{", hint="expected '{' after collection")
+        body = []
+        while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
+            stmt = self.parse_statement()
+            if stmt:
+                body.append(stmt)
+        self.expect("OP", "}", hint="expected '}' to close for body")
+        return ForInStmt(var.value, coll, body, kw.line, kw.column)
 
     # Expression parsing (Pratt precedence climbing)
     def parse_expression(self, min_prec=0):

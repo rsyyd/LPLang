@@ -256,6 +256,16 @@ class Interpreter:
                     self.exec_stmt(s, sub_env)
             return None
 
+        elif kind == "ForInStmt":
+            coll = self.eval_expr(stmt.coll, env)
+            # Support Python iterable (list, range, etc.)
+            for item in coll:
+                sub_env = Environment(env)
+                sub_env.define(stmt.var, item, mutable=True)
+                for s in stmt.body:
+                    self.exec_stmt(s, sub_env)
+            return None
+
         elif kind == "ExprStmt":
             return self.eval_expr(stmt.expr, env)
 
@@ -430,6 +440,7 @@ class Interpreter:
             if expr.op == ">=": return l >= r
             if expr.op in ("and", "&&"): return l and r
             if expr.op in ("or", "||"): return l or r
+            if expr.op == "..": return range(int(l), int(r) + 1)  # inclusive range
 
             raise RuntimeError(f"unsupported binary op '{expr.op}'", expr.line, expr.col)
 
