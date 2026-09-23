@@ -21,7 +21,7 @@ Unknown types (not in PRIMITIVES) produce a diagnostic at declaration site.
 
 from .diagnostics import DiagnosticBag
 from .ast import (
-    FnDecl, LetStmt, ReturnStmt, IfStmt, WhileStmt, ExprStmt,
+    FnDecl, LetStmt, ReturnStmt, ForInStmt, IfStmt, WhileStmt, ExprStmt,
     IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr
 )
 
@@ -181,6 +181,16 @@ class TypeChecker:
                 self.diags.error(f"while condition must be bool, got '{cond_t}'",
                                  stmt.line, stmt.col)
             self.push()
+            for s in stmt.body:
+                self.check_stmt(s)
+            self.pop()
+        elif kind == "ForInStmt":
+            coll_t = self.check_expr(stmt.coll)
+            if coll_t is not None and coll_t != "list" and coll_t != "range":
+                self.diags.error(f"for-in expects a list or range, got '{coll_t}'",
+                                 stmt.line, stmt.col)
+            self.push()
+            self.declare(stmt.var, "int", True, stmt.line, stmt.col)
             for s in stmt.body:
                 self.check_stmt(s)
             self.pop()

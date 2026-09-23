@@ -187,6 +187,19 @@ class ReturnStmt(Node):
         self.value = value
 
 @dataclass
+class ForInStmt(Node):
+    var: str
+    coll: Any
+    body: list
+    line: int = 0
+    col: int = 0
+    def __init__(self, var, coll, body, line=0, col=0):
+        super().__init__(line, col)
+        self.var = var
+        self.coll = coll
+        self.body = body
+
+@dataclass
 class IfStmt(Node):
     cond: Any
     then_body: list
