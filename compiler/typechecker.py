@@ -111,13 +111,14 @@ class TypeChecker:
         if sdecl.name in self.structs or sdecl.name in PRIMITIVES:
             self.diags.error(f"duplicate type definition '{sdecl.name}'", sdecl.line, sdecl.col)
             return
+        tparams = getattr(sdecl, 'type_params', []) or []
         fields = {}
         for fname, ftype in sdecl.fields:
-            if not self.is_valid_type(ftype):
+            if not self.is_valid_type(ftype) and ftype not in tparams:
                 self.diags.error(f"unknown type '{ftype}' for field '{fname}' in struct '{sdecl.name}'",
                                  sdecl.line, sdecl.col)
             fields[fname] = ftype
-        self.structs[sdecl.name] = fields
+        self.structs[sdecl.name] = {"fields": fields, "type_params": tparams}
 
     def _register_fn(self, fn):
         # Collect type params from generic functions
@@ -423,7 +424,8 @@ class TypeChecker:
             if expr.type_name not in self.structs:
                 self.diags.error(f"unknown struct type '{expr.type_name}'", expr.line, expr.col)
                 return None
-            expected_fields = self.structs[expr.type_name]
+            struct_info = self.structs[expr.type_name]
+            expected_fields = struct_info["fields"] if isinstance(struct_info, dict) else struct_info
             provided_fields = set()
             for fname, fexpr in expr.fields:
                 provided_fields.add(fname)
@@ -432,7 +434,9 @@ class TypeChecker:
                     self.diags.error(f"struct '{expr.type_name}' has no field named '{fname}'", fexpr.line, fexpr.col)
                 else:
                     exp_t = expected_fields[fname]
-                    if ft is not None and ft != exp_t:
+                    # Don't fail if expected type is a generic type param
+                    tparams = struct_info.get("type_params", []) if isinstance(struct_info, dict) else []
+                    if exp_t not in tparams and ft is not None and ft != exp_t:
                         self.diags.error(f"field '{fname}' of '{expr.type_name}': expected '{exp_t}', got '{ft}'",
                                          fexpr.line, fexpr.col)
             for ef in expected_fields:
@@ -447,11 +451,16 @@ class TypeChecker:
             if obj_t not in self.structs:
                 self.diags.error(f"cannot access field on non-struct type '{obj_t}'", expr.line, expr.col)
                 return None
-            fields = self.structs[obj_t]
+            struct_info = self.structs[obj_t]
+            fields = struct_info["fields"] if isinstance(struct_info, dict) else struct_info
             if expr.field not in fields:
                 self.diags.error(f"struct '{obj_t}' has no field named '{expr.field}'", expr.line, expr.col)
                 return None
-            return fields[expr.field]
+            f_type = fields[expr.field]
+            tparams = struct_info.get("type_params", []) if isinstance(struct_info, dict) else []
+            # If the field is a generic type parameter, we can't statically know its concrete type yet
+            # without monomorphization/full generic types, so return None (unchecked)
+            return None if f_type in tparams else f_type
 
         if kind == "IfExpr":
             # If-expressions are parsed only in expression position; Stage 0

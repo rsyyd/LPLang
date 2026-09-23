@@ -231,12 +231,14 @@ class FnDecl(Node):
 class StructDecl(Node):
     name: str
     fields: list          # list of (field_name, field_type) tuples
+    type_params: list     # list of type parameter names
     line: int = 0
     col: int = 0
-    def __init__(self, name, fields, line=0, col=0):
+    def __init__(self, name, fields, type_params=None, line=0, col=0):
         super().__init__(line, col)
         self.name = name
         self.fields = fields
+        self.type_params = type_params or []
 
 @dataclass
 class EnumDecl(Node):
