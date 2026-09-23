@@ -58,7 +58,7 @@ class TestTypeChecker(unittest.TestCase):
         """
         diags = self.check(src)
         self.assertTrue(diags.has_errors())
-        self.assertTrue(any("expected 'int', got 'string'" in d.message for d in diags.items))
+        self.assertTrue(any("argument mismatch: expected type 'int', got 'string'" in d.message for d in diags.items))
 
     def test_return_type_mismatch_reported(self):
         src = """

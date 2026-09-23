@@ -215,6 +215,18 @@ class Parser:
         if not ident:
             return None
 
+        # Parse generic type parameters: struct Box<T> { ... }
+        type_params = []
+        if self.match("OP", "<"):
+            if not self.match("OP", ">"):
+                while True:
+                    tname = self.expect("IDENT", hint="expected type parameter name")
+                    if tname:
+                        type_params.append(tname.value)
+                    if not self.match("OP", ","):
+                        break
+                self.expect("OP", ">", hint="close generic type parameters with '>'")
+
         self.expect("OP", "{", hint="open struct body with '{'")
         fields = []
         while self.current().kind != "EOF" and not (self.current().kind == "OP" and self.current().value == "}"):
@@ -229,7 +241,7 @@ class Parser:
             self.match("OP", ",")  # optional trailing comma
         
         self.expect("OP", "}", hint="close struct body with '}'")
-        return StructDecl(ident.value, fields, kw.line, kw.column)
+        return StructDecl(ident.value, fields, type_params, kw.line, kw.column)
 
     def parse_enum_decl(self):
         kw = self.advance()  # consume 'enum'
