@@ -116,6 +116,15 @@ class ListLit(Node):
         self.elements = elements
 
 @dataclass
+class TupleLit(Node):
+    elements: list
+    line: int = 0
+    col: int = 0
+    def __init__(self, elements, line=0, col=0):
+        super().__init__(line, col)
+        self.elements = elements
+
+@dataclass
 class IndexAccess(Node):
     target: Any
     index: Any

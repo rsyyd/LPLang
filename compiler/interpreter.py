@@ -333,6 +333,8 @@ class Interpreter:
 
         elif kind == "ListLit":
             return [self.eval_expr(e, env) for e in expr.elements]
+        elif kind == "TupleLit":
+            return tuple(self.eval_expr(e, env) for e in expr.elements)
 
         elif kind == "AwaitExpr":
             target = self.eval_expr(expr.expr, env)
@@ -385,11 +387,11 @@ class Interpreter:
         elif kind == "IndexAccess":
             target = self.eval_expr(expr.target, env)
             index = self.eval_expr(expr.index, env)
-            if isinstance(target, list):
+            if isinstance(target, (list, tuple)):
                 if not isinstance(index, int):
-                    raise RuntimeError("list index must be int", expr.line, expr.col)
+                    raise RuntimeError("index must be int", expr.line, expr.col)
                 if index < 0 or index >= len(target):
-                    raise RuntimeError(f"list index out of bounds: {index}", expr.line, expr.col)
+                    raise RuntimeError(f"index out of bounds: {index}", expr.line, expr.col)
                 return target[index]
             elif isinstance(target, str):
                 if not isinstance(index, int):
@@ -398,7 +400,7 @@ class Interpreter:
                     raise RuntimeError(f"string index out of bounds: {index}", expr.line, expr.col)
                 return target[index]
             else:
-                raise RuntimeError("index access only supported on list and string", expr.line, expr.col)
+                raise RuntimeError("index access only supported on list, tuple, and string", expr.line, expr.col)
 
         elif kind == "BinOp":
             if expr.op == "=":

@@ -22,10 +22,11 @@ Unknown types (not in PRIMITIVES) produce a diagnostic at declaration site.
 from .diagnostics import DiagnosticBag
 from .ast import (
     FnDecl, LetStmt, ReturnStmt, ForInStmt, IfStmt, WhileStmt, ExprStmt,
-    IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr
+    IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr,
+    StructLit, TupleLit, IndexAccess
 )
 
-PRIMITIVES = {"int", "float", "string", "bool", "list"}
+PRIMITIVES = {"int", "float", "string", "bool", "list", "tuple"}
 
 # Map AST literal/expr class name -> static type
 _LIT_TYPES = {
@@ -33,6 +34,8 @@ _LIT_TYPES = {
     "FloatLit": "float",
     "StrLit": "string",
     "BoolLit": "bool",
+    "TupleLit": "tuple",
+    "ListLit": "list",
 }
 
 
@@ -327,6 +330,10 @@ class TypeChecker:
             for e in expr.elements:
                 self.check_expr(e)
             return "list"
+        if kind == "TupleLit":
+            for e in expr.elements:
+                self.check_expr(e)
+            return "tuple"
 
         if kind == "IndexAccess":
             t = self.check_expr(expr.target)

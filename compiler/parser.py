@@ -12,7 +12,7 @@ from .ast import (
     EnumDecl, MatchStmt, MatchArm, MatchExpr,
     WildcardPattern, LitPattern, IdentPattern, VariantPattern,
     ImportStmtStub,
-    ListLit, IndexAccess,
+    ListLit, TupleLit, IndexAccess,
     AsyncFnDecl, AwaitExpr, SpawnExpr,
     TryExpr
 )
@@ -537,12 +537,36 @@ class Parser:
         if tok.kind == "KEYWORD" and tok.value == "match":
             return self.parse_match_expr()
 
-        # Parenthesized expression
+        # Parenthesized expression or tuple literal
         if tok.kind == "OP" and tok.value == "(":
-            self.advance()
-            expr = self.parse_expression()
-            self.expect("OP", ")", hint="expected closing ')'")
-            return expr
+            self.advance()  # consume '('
+            # Check if it's empty tuple
+            if self.match("OP", ")"):
+                return TupleLit([], tok.line, tok.column)
+            # Parse first element
+            first_elem = self.parse_expression()
+            if first_elem is None:
+                return None
+            # If next token is ',' then it's a tuple, otherwise it's parenthesized expr
+            if self.match("OP", ","):
+                elements = [first_elem]
+                while not self.match("OP", ")"):
+                    if self.current().kind == "EOF":
+                        self.diags.error("expected ')' in tuple", tok.line, tok.column)
+                        break
+                    elem = self.parse_expression()
+                    if elem is None:
+                        break
+                    elements.append(elem)
+                    if not self.match("OP", ","):
+                        # Expect closing ')'
+                        self.expect("OP", ")", hint="expected closing ')' after tuple element")
+                        break
+                return TupleLit(elements, tok.line, tok.column)
+            else:
+                # It's just a parenthesized expression
+                self.expect("OP", ")", hint="expected closing ')'")
+                return first_elem
 
         # Literals
         if tok.kind == "INT":
