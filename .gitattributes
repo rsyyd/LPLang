@@ -1,1 +1,6 @@
+# Ignore Python bootstrap compiler from repository language stats
+*.py linguist-vendored
+
+# Override .lp files
 *.lp linguist-language=Lumpo Language
+*.lp linguist-detectable=true
