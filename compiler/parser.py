@@ -10,7 +10,7 @@ from .ast import (
     IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call, IfExpr,
     StructDecl, StructLit, FieldAccess,
     EnumDecl, MatchStmt, MatchArm, MatchExpr,
-    WildcardPattern, LitPattern, IdentPattern, VariantPattern,
+    WildcardPattern, LitPattern, IdentPattern, VariantPattern, TuplePattern,
     ImportStmtStub,
     ListLit, TupleLit, IndexAccess,
     AsyncFnDecl, AwaitExpr, SpawnExpr,
@@ -143,8 +143,16 @@ class Parser:
         kw = self.advance()
         mutable = (kw.value == "var")
 
-        ident = self.expect("IDENT", hint="provide variable name after 'let' or 'var'")
-        if not ident:
+        # Parse pattern (can be identifier, tuple pattern, etc.)
+        # If the next token is an IDENT and not followed by '(' or '::', it is an IdentPattern
+        if self.current().kind == "IDENT" and not (self.peek().kind == "OP" and self.peek().value in ("::", "(")):
+            ident = self.advance()
+            pattern = IdentPattern(ident.value, ident.line, ident.column)
+        else:
+            pattern = self.parse_pattern()
+
+        if pattern is None:
+            self.diags.error("expected variable pattern after 'let' or 'var'", kw.line, kw.column)
             return None
 
         type_ann = None
@@ -161,7 +169,7 @@ class Parser:
                              hint="assign with '=' or specify default value")
 
         self.match("OP", ";")
-        return LetStmt(ident.value, type_ann, val, mutable, kw.line, kw.column)
+        return LetStmt(pattern, type_ann, val, mutable, kw.line, kw.column)
 
     def parse_import(self):
         kw = self.advance()  # consume 'import'
@@ -322,6 +330,22 @@ class Parser:
         if tok.kind == "IDENT" and tok.value == "_":
             self.advance()
             return WildcardPattern(tok.line, tok.column)
+
+        # Tuple pattern: (p1, p2, ...)
+        if tok.kind == "OP" and tok.value == "(":
+            self.advance()
+            patterns = []
+            if self.match("OP", ")"):
+                return TuplePattern([], tok.line, tok.column)
+            while True:
+                sub_pat = self.parse_pattern()
+                if sub_pat:
+                    patterns.append(sub_pat)
+                if self.match("OP", ","):
+                    continue
+                break
+            self.expect("OP", ")", hint="expected ')' to close tuple pattern")
+            return TuplePattern(patterns, tok.line, tok.column)
 
         # Literals (int, float, string, bool)
         if tok.kind == "INT":

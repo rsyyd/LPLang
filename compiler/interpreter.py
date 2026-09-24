@@ -183,7 +183,11 @@ class Interpreter:
 
         if kind == "LetStmt":
             val = self.eval_expr(stmt.value, env) if stmt.value else None
-            env.define(stmt.name, val, stmt.mutable)
+            matched, bindings = self.match_pattern(stmt.pattern, val)
+            if not matched:
+                raise RuntimeError("pattern matching failed in variable declaration", stmt.line, stmt.col)
+            for name, v in bindings.items():
+                env.define(name, v, stmt.mutable)
             return None
 
         elif kind == "FnDecl":
@@ -290,6 +294,18 @@ class Interpreter:
                 return False, {}
             all_bindings = {}
             for sub_p, sub_v in zip(pattern.sub_patterns, val.values):
+                matched, sub_b = self.match_pattern(sub_p, sub_v)
+                if not matched:
+                    return False, {}
+                all_bindings.update(sub_b)
+            return True, all_bindings
+        if pkind == "TuplePattern":
+            if not isinstance(val, tuple):
+                return False, {}
+            if len(pattern.patterns) != len(val):
+                return False, {}
+            all_bindings = {}
+            for sub_p, sub_v in zip(pattern.patterns, val):
                 matched, sub_b = self.match_pattern(sub_p, sub_v)
                 if not matched:
                     return False, {}

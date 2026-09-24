@@ -243,26 +243,46 @@ class TypeChecker:
         self.current_fn_ret = None
 
     def _check_let(self, stmt):
+        # Check initializer expression
         init_t = self.check_expr(stmt.value) if stmt.value is not None else None
-
+        
+        # Determine target type for pattern matching
+        target_type = None
         if stmt.type_ann is not None:
             if not self.is_valid_type(stmt.type_ann):
-                self.diags.error(f"unknown type '{stmt.type_ann}' for variable '{stmt.name}'",
+                self.diags.error(f"unknown type '{stmt.type_ann}' for variable declaration",
                                  stmt.line, stmt.col)
-                ann_t = None
             else:
-                ann_t = stmt.type_ann
+                target_type = stmt.type_ann
+        
+        # If no explicit type annotation, use inferred type from initializer
+        if target_type is None:
+            target_type = init_t
+        
+        # Check type compatibility between annotation and initializer
+        if stmt.type_ann is not None and init_t is not None:
+            # Convert type_ann to internal type if needed
+            ann_t = stmt.type_ann
             if ann_t is not None and init_t is not None and ann_t != init_t:
-                self.diags.error(
-                    f"cannot initialize '{stmt.type_ann}' variable '{stmt.name}' with '{init_t}' value",
-                    stmt.line, stmt.col,
-                    hint=f"change the annotation to '{init_t}' or fix the initializer")
+                self.diags.error(f"cannot initialize '{stmt.type_ann}' variable '{stmt.pattern.name if hasattr(stmt.pattern, 'name') else str(stmt.pattern)}' with '{init_t}' value",
+                                 stmt.line, stmt.col,
+                                 hint=f"change the annotation to '{init_t}' or fix the initializer")
+        
+        # Check pattern against target type (this will bind variables)
+        if target_type is not None:
+            self.check_pattern(stmt.pattern, target_type, mutable=stmt.mutable)
         else:
-            ann_t = init_t
+            # ponytail: when type is unknown (e.g. await/spawn/index), still bind names so they are in scope
+            self._bind_pattern_unchecked(stmt.pattern, stmt.mutable)
 
-        # Declare even when ann_t is None (e.g. spawn/await/index results)
-        # so the variable is in scope; its type is simply unchecked.
-        self.declare(stmt.name, ann_t, stmt.mutable, stmt.line, stmt.col)
+    def _bind_pattern_unchecked(self, pattern, mutable):
+        pkind = pattern.__class__.__name__
+        if pkind == "IdentPattern":
+            self.declare(pattern.name, None, mutable, line=pattern.line, col=pattern.col)
+        elif pkind == "TuplePattern":
+            for sub_p in pattern.patterns:
+                self._bind_pattern_unchecked(sub_p, mutable)
+        # WildcardPattern, LitPattern, VariantPattern: no bindings needed
 
     def _check_return(self, stmt):
         val_t = self.check_expr(stmt.value) if stmt.value is not None else None
@@ -278,7 +298,7 @@ class TypeChecker:
         # TODO: missing-return-path analysis (function with declared non-None
         # return type but some path falls off the end) is NOT yet detected.
 
-    def check_pattern(self, pattern, expected_type):
+    def check_pattern(self, pattern, expected_type, mutable=True):
         pkind = pattern.__class__.__name__
         if pkind == "WildcardPattern":
             return
@@ -290,7 +310,16 @@ class TypeChecker:
             return
         if pkind == "IdentPattern":
             # Bind the variable to the expected type
-            self.declare(pattern.name, expected_type, mutable=True, line=pattern.line, col=pattern.col)
+            self.declare(pattern.name, expected_type, mutable, line=pattern.line, col=pattern.col)
+            return
+        if pkind == "TuplePattern":
+            if expected_type is not None and expected_type != "tuple":
+                self.diags.error(f"tuple pattern requires tuple type, got '{expected_type}'",
+                                 pattern.line, pattern.col)
+                return
+            # Bind each sub-pattern with unchecked type (None)
+            for sub_p in pattern.patterns:
+                self.check_pattern(sub_p, None, mutable)
             return
         if pkind == "VariantPattern":
             if expected_type not in self.enums:

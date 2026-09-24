@@ -164,15 +164,15 @@ class IfExpr(Node):
 
 @dataclass
 class LetStmt(Node):
-    name: str
-    type_ann: Optional[str]   # explicit type annotation; None = infer
+    pattern: Any  # Pattern node (IdentPattern, TuplePattern, etc.)
+    type_ann: Optional[str]
     value: Any
-    mutable: bool             # True for var, False for let
+    mutable: bool
     line: int = 0
     col: int = 0
-    def __init__(self, name, type_ann, value, mutable, line=0, col=0):
+    def __init__(self, pattern, type_ann, value, mutable, line=0, col=0):
         super().__init__(line, col)
-        self.name = name
+        self.pattern = pattern
         self.type_ann = type_ann
         self.value = value
         self.mutable = mutable
@@ -308,6 +308,13 @@ class VariantPattern(Pattern):
         self.enum_name = enum_name
         self.variant_name = variant_name
         self.sub_patterns = sub_patterns
+
+@dataclass
+class TuplePattern(Pattern):
+    patterns: list
+    def __init__(self, patterns, line=0, col=0):
+        super().__init__(line, col)
+        self.patterns = patterns
 
 @dataclass
 class MatchArm(Node):

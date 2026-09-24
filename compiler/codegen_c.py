@@ -16,6 +16,7 @@ functions with a generated main().
 from .ast import (
     IntLit, FloatLit, StrLit, BoolLit, Ident, BinOp, UnaryOp, Call,
     LetStmt, ReturnStmt, IfStmt, WhileStmt, ExprStmt, FnDecl,
+    IdentPattern,
 )
 
 
@@ -147,15 +148,32 @@ class CGenerator:
         kind = stmt.__class__.__name__
 
         if kind == "LetStmt":
-            ctype = "int"
-            if stmt.type_ann == "bool":
-                ctype = "bool"
-            elif stmt.type_ann == "float":
-                ctype = "double"
-            elif stmt.type_ann == "string":
-                ctype = "const char*"
-            val = self.gen_expr(stmt.value)
-            return f"{ctype} {self._mangle(stmt.name)} = {val};"
+            # For C codegen, only handle simple identifier declarations
+            # Destructuring is not supported in C backend (experimental)
+            if hasattr(stmt, 'pattern') and isinstance(stmt.pattern, IdentPattern):
+                ctype = "int"
+                if stmt.type_ann == "bool":
+                    ctype = "_Bool"
+                elif stmt.type_ann == "float":
+                    ctype = "double"
+                elif stmt.type_ann == "string":
+                    ctype = "const char*"
+                val = self.gen_expr(stmt.value)
+                return f"{ctype} {self._mangle(stmt.pattern.name)} = {val};"
+            elif hasattr(stmt, 'name'):
+                # Backward compatibility for old LetStmt with name attribute
+                ctype = "int"
+                if stmt.type_ann == "bool":
+                    ctype = "bool"
+                elif stmt.type_ann == "float":
+                    ctype = "double"
+                elif stmt.type_ann == "string":
+                    ctype = "const char*"
+                val = self.gen_expr(stmt.value)
+                return f"{ctype} {self._mangle(stmt.name)} = {val};"
+            else:
+                # For tuple patterns or other complex patterns, skip in C backend
+                return ""
 
         elif kind == "ExprStmt":
             return self.gen_expr(stmt.expr) + ";"
