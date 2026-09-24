@@ -168,6 +168,7 @@ class Parser:
             self.diags.error("variable declaration requires initial value", kw.line, kw.column,
                              hint="assign with '=' or specify default value")
 
+        # Semicolon is optional (like Python/Go/Rust)
         self.match("OP", ";")
         return LetStmt(pattern, type_ann, val, mutable, kw.line, kw.column)
 

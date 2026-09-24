@@ -1,18 +1,18 @@
 // math_utils.lp — imported by 04_modules.lp
 
 fn square(x: int) -> int {
-    return x * x;
+    return x * x
 }
 
 fn cube(x: int) -> int {
-    return x * x * x;
+    return x * x * x
 }
 
 fn max(a: int, b: int) -> int {
     if a > b {
-        return a;
+        return a
     }
-    return b;
+    return b
 }
 
-var MAGIC: int = 42;
+var magic: int = 42

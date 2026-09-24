@@ -13,32 +13,32 @@ enum Result {
 
 fn is_some(opt: Option) -> bool {
     match opt {
-        Some(_) => { return true; },
-        None => { return false; },
+        Some(_) => { return true },
+        None => { return false },
     }
-    return false;
+    return false
 }
 
 fn is_ok(res: Result) -> bool {
     match res {
-        Ok(_) => { return true; },
-        Err(_) => { return false; },
+        Ok(_) => { return true },
+        Err(_) => { return false },
     }
-    return false;
+    return false
 }
 
 fn unwrap_or(opt: Option, fallback: int) -> int {
     match opt {
-        Some(v) => { return v; },
-        None => { return fallback; },
+        Some(v) => { return v },
+        None => { return fallback },
     }
-    return fallback;
+    return fallback
 }
 
 fn unwrap_result_or(res: Result, fallback: int) -> int {
     match res {
-        Ok(v) => { return v; },
-        Err(_) => { return fallback; },
+        Ok(v) => { return v },
+        Err(_) => { return fallback },
     }
-    return fallback;
+    return fallback
 }
