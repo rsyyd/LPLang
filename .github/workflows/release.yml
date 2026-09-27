@@ -47,7 +47,7 @@ jobs:
       - name: Generate changelog
         run: cargo run -p lplang-versioning -- changelog > dist/CHANGELOG.md
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/lp-linux-x86_64
