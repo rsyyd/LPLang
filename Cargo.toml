@@ -21,7 +21,7 @@ description = "LPLang — Familiar syntax, modern semantics"
 [workspace.dependencies]
 # Parser & AST
 lalrpop = { version = "0.22", features = ["lexer"] }
-lalrpop-util = "0.22"
+lalrpop-util = "0.23"
 logos = "0.16"
 
 # Diagnostics & Error Handling
