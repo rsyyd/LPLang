@@ -1,0 +1,17 @@
+[book]
+title = "LPLang Book"
+authors = ["rsyyd"]
+language = "en"
+src = "src"
+build-dir = "../book"
+
+[output.html]
+theme = "theme"
+default-theme = "ayu"
+mathjax-support = true
+copy-fonts = true
+curly-quotes = true
+
+[output.html.fold]
+enable = true
+level = 2

@@ -1,0 +1,35 @@
+[package]
+name = "lplang-lpm"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+description = "LPLang package manager"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+indexmap = { workspace = true }
+clap = { workspace = true }
+clap_complete = { workspace = true }
+git2 = { workspace = true }
+semver = { workspace = true }
+# conventional-commit = { workspace = true }
+# reqwest = { version = "0.10", features = ["json", "rustls-tls", "gzip"] }
+ureq = { version = "2", features = ["json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+lplang-compiler = { path = "../compiler" }
+lplang-versioning = { path = "../versioning" }
+
+[features]
+default = []

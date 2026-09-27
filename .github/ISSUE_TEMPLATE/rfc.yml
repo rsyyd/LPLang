@@ -1,0 +1,68 @@
+name: RFC
+description: Request for Comments — significant design changes
+title: "[RFC]: "
+labels: ["rfc"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        RFCs are for significant changes that affect multiple parts of the language or toolchain.
+        See [CONTRIBUTING.md](CONTRIBUTING.md#rfc-process) for the process.
+  - type: input
+    id: rfc-number
+    attributes:
+      label: RFC Number
+      description: Leave blank — will be assigned on acceptance
+      placeholder: "RFC-XXX"
+    validations:
+      required: false
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-paragraph summary of the proposal
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why are we doing this? What problems does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Detailed Design
+      description: Full specification. Include syntax, semantics, examples, edge cases.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: drawbacks
+    attributes:
+      label: Drawbacks
+      description: What are the downsides? Complexity, breaking changes, learning curve?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: What other designs were considered? Why reject them?
+    validations:
+      required: true
+  - type: textarea
+    id: migration
+    attributes:
+      label: Migration Strategy
+      description: How do existing users migrate? Is it a breaking change?
+    validations:
+      required: false
+  - type: textarea
+    id: unresolved
+    attributes:
+      label: Unresolved Questions
+      description: Open questions that need discussion
+    validations:
+      required: false

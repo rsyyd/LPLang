@@ -1,0 +1,30 @@
+[package]
+name = "lplang-vm"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+description = "LPLang bytecode VM and runtime"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+indexmap = { workspace = true }
+smallvec = { workspace = true }
+bitflags = { workspace = true }
+once_cell = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+lplang-compiler = { path = "../compiler" }
+lplang-stdlib = { path = "../stdlib" }
+
+[features]
+default = []

@@ -1,0 +1,47 @@
+name: Feature Request
+description: Suggest an idea for LPLang
+title: "[Feature]: "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please keep it focused and concrete.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this solve? What's the use case?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should this work? Syntax, semantics, examples.
+      render: lp
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other approaches did you consider? Why is this better?
+    validations:
+      required: false
+  - type: textarea
+    id: prior-art
+    attributes:
+      label: Prior Art
+      description: Links to similar features in other languages (Rust, Go, Zig, Python, etc.)
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: This aligns with LPLang's design principles (PRD §3)
+          required: true
+        - label: I'm willing to help implement or test this
+          required: false

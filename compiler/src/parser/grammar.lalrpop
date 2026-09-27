@@ -1,0 +1,276 @@
+grammar;
+
+pub Program: Vec<Item> = {
+    Item*,
+};
+
+Item: Item = {
+    "pub"? Item_,
+};
+
+Item_: ItemKind = {
+    FnItem => ItemKind::Fn,
+    StructItem => ItemKind::Struct,
+    EnumItem => ItemKind::Enum,
+    TraitDef => ItemKind::Trait,
+    ImplDef => ItemKind::Impl,
+    ConstItem => ItemKind::Const,
+    TypeAliasItem => ItemKind::TypeAlias,
+    UseItem => ItemKind::Use,
+    ModItem => ItemKind::Mod,
+    ExternBlock => ItemKind::ExternBlock,
+};
+
+FnItem: (String, FnSig, BlockExpr) = {
+    "fn" Ident FnSig BlockExpr => (/* name */, /* sig */, /* body */),
+};
+
+FnSig: FnSig = {
+    "(" FnParam* ")" ("->" Type) => FnSig { params: _, ret_ty: _ },
+};
+
+FnParam: FnParam = {
+    "mut"? Ident ":" Type => FnParam { mutable: _, name: _, ty: _ },
+};
+
+StructItem: (String, Vec<GenericParam>, Vec<StructField>) = {
+    "struct" Ident GenericParams? "{" StructField* "}" => (_, _, _),
+};
+
+StructField: StructField = {
+    Ident ":" Type => StructField { name: _, ty: _ },
+};
+
+EnumItem: (String, Vec<GenericParam>, Vec<EnumVariant>) = {
+    "enum" Ident GenericParams? "{" EnumVariant* "}" => (_, _, _),
+};
+
+EnumVariant: EnumVariant = {
+    Ident ("(" Type ")")? => EnumVariant { name: _, ty: _ },
+};
+
+TraitDef: (String, Vec<GenericParam>, Vec<TraitItem>) = {
+    "trait" Ident GenericParams? "{" TraitItem* "}" => (_, _, _),
+};
+
+TraitItem: TraitItemKind = {
+    FnSig ";" => TraitItemKind::Fn,
+    "type" Ident ("=" Type)? ";" => TraitItemKind::TypeAlias,
+    "const" Ident ":" Type "=" Expr ";" => TraitItemKind::Const,
+};
+
+ImplDef: (Option<TraitRef>, Type, Vec<ImplItem>) = {
+    "impl" GenericParams? TraitRef? "for" Type "{" ImplItem* "}" => (_, _, _),
+};
+
+ImplItem: ImplItemKind = {
+    FnItem => ImplItemKind::Fn,
+    "type" Ident "=" Type ";" => ImplItemKind::TypeAlias,
+    "const" Ident ":" Type "=" Expr ";" => ImplItemKind::Const,
+};
+
+ConstItem: (String, Type, Expr) = {
+    "const" Ident ":" Type "=" Expr ";" => (_, _, _),
+};
+
+TypeAliasItem: (String, Type) = {
+    "type" Ident "=" Type ";" => (_, _),
+};
+
+UseItem: UseTree = {
+    "use" UseTree ";" => _,
+};
+
+UseTree: UseTree = {
+    Ident ("as" Ident)? => UseTree::Simple { name: _, alias: _ },
+    "{" UseTree* "}" => UseTree::Glob { items: _ },
+    Ident "::" UseTree => UseTree::Path { prefix: _, rest: _ },
+};
+
+ModItem: (String, Vec<Item>) = {
+    "mod" Ident "{" Item* "}" => (_, _),
+};
+
+ExternBlock: Vec<ExternItem> = {
+    "extern" String "{" ExternItem* "}" => _,
+};
+
+ExternItem: ExternItemKind = {
+    "fn" Ident FnSig ";" => ExternItemKind::Fn,
+    "static" Ident ":" Type ";" => ExternItemKind::Static,
+};
+
+GenericParams: Vec<GenericParam> = {
+    "<" GenericParam* ">" => _,
+};
+
+GenericParam: GenericParam = {
+    Ident (":" TraitBound+)? => GenericParam { name: _, bounds: _ },
+};
+
+TraitBound: TraitBound = {
+    Ident ("<" Type* ">")? => TraitBound { trait: _, args: _ },
+};
+
+TraitRef: TraitRef = {
+    Ident ("<" Type* ">")? => TraitRef { trait: _, args: _ },
+};
+
+Type: Type = {
+    TypePath => Type::Path,
+    "(" Type ")" => Type::Group,
+    "[" Type (";" Expr)? "]" => Type::Array,
+    "&" "mut"? Type => Type::Ref,
+    "fn" "(" Type* ")" "->" Type => Type::Fn,
+};
+
+TypePath: TypePath = {
+    Ident ("::" Ident)* ("<" Type+ ">")? => TypePath { segments: _, args: _ },
+};
+
+Expr: Expr = {
+    ExprAssign,
+};
+
+ExprAssign: Expr = {
+    ExprOr "=" ExprAssign => Expr::Assign,
+    ExprOr => _,
+};
+
+ExprOr: Expr = {
+    ExprAnd "||" ExprOr => Expr::BinOp(BinOp::Or, _, _),
+    ExprAnd => _,
+};
+
+ExprAnd: Expr = {
+    ExprEq "&&" ExprAnd => Expr::BinOp(BinOp::And, _, _),
+    ExprEq => _,
+};
+
+ExprEq: Expr = {
+    ExprCmp "==" ExprEq => Expr::BinOp(BinOp::Eq, _, _),
+    ExprCmp "!=" ExprEq => Expr::BinOp(BinOp::Ne, _, _),
+    ExprCmp => _,
+};
+
+ExprCmp: Expr = {
+    ExprAdd "<" ExprCmp => Expr::BinOp(BinOp::Lt, _, _),
+    ExprAdd "<=" ExprCmp => Expr::BinOp(BinOp::Le, _, _),
+    ExprAdd ">" ExprCmp => Expr::BinOp(BinOp::Gt, _, _),
+    ExprAdd ">=" ExprCmp => Expr::BinOp(BinOp::Ge, _, _),
+    ExprAdd => _,
+};
+
+ExprAdd: Expr = {
+    ExprMul "+" ExprAdd => Expr::BinOp(BinOp::Add, _, _),
+    ExprMul "-" ExprAdd => Expr::BinOp(BinOp::Sub, _, _),
+    ExprMul => _,
+};
+
+ExprMul: Expr = {
+    ExprUnary "*" ExprMul => Expr::BinOp(BinOp::Mul, _, _),
+    ExprUnary "/" ExprMul => Expr::BinOp(BinOp::Div, _, _),
+    ExprUnary "%" ExprMul => Expr::BinOp(BinOp::Rem, _, _),
+    ExprUnary => _,
+};
+
+ExprUnary: Expr = {
+    "!" ExprUnary => Expr::Unary(UnOp::Not, _),
+    "-" ExprUnary => Expr::Unary(UnOp::Neg, _),
+    "*" ExprUnary => Expr::Unary(UnOp::Deref, _),
+    "&" ExprUnary => Expr::Unary(UnOp::Ref, _),
+    "&mut" ExprUnary => Expr::Unary(UnOp::RefMut, _),
+    ExprAwait => _,
+};
+
+ExprAwait: Expr = {
+    ExprPostfix ".await" => Expr::Await,
+    ExprPostfix => _,
+};
+
+ExprPostfix: Expr = {
+    ExprPostfixOp => _,
+    ExprPrimary => _,
+};
+
+ExprPostfixOp: Expr = {
+    ExprPostfixOp "." Ident => Expr::Field(_, _),
+    ExprPostfixOp "(" Expr* ")" => Expr::Call(_, _),
+    ExprPostfixOp "[" Expr "]" => Expr::Index(_, _),
+};
+
+ExprPrimary: Expr = {
+    Literal => Expr::Literal,
+    Ident => Expr::Var,
+    "(" Expr ")" => Expr::Group,
+    "{" Stmt* "}" => Expr::Block,
+    "if" Expr "then" BlockExpr "else" BlockExpr "end" => Expr::If,
+    "match" Expr "{" MatchArm* "}" => Expr::Match,
+    "while" Expr "do" BlockExpr "end" => Expr::While,
+    "for" Pattern "in" Expr "do" BlockExpr "end" => Expr::For,
+    "loop" BlockExpr "end" => Expr::Loop,
+    "break" Expr? ";" => Expr::Break,
+    "continue" ";" => Expr::Continue,
+    "return" Expr? ";" => Expr::Return,
+    "async" BlockExpr => Expr::AsyncBlock,
+    "await" Expr => Expr::Await,
+    "spawn" Expr => Expr::Spawn,
+    "nursery" "{" "}" => Expr::Nursery,
+    "unsafe" "{" "}" => Expr::UnsafeBlock,
+    "comptime" "{" "}" => Expr::ComptimeBlock,
+};
+
+Literal: Literal = {
+    Integer => Literal::Int,
+    Float => Literal::Float,
+    String => Literal::Str,
+    Char => Literal::Char,
+    "true" => Literal::Bool(true),
+    "false" => Literal::Bool(false),
+    "_" => Literal::Underscore,
+};
+
+MatchArm: MatchArm = {
+    Pattern ("if" Expr)? "=>" Expr "," => MatchArm { pattern: _, guard: _, body: _ },
+};
+
+Pattern: Pattern = {
+    Ident => Pattern::Var,
+    Literal => Pattern::Literal,
+    "_" => Pattern::Wildcard,
+    "(" Pattern+ ")" => Pattern::Tuple,
+    "[" Pattern+ "]" => Pattern::Array,
+    Ident "(" Pattern+ ")" => Pattern::Constructor,
+    Ident "@" Pattern => Pattern::Binding,
+};
+
+BlockExpr: BlockExpr = {
+    "{" Stmt+ "}" => BlockExpr { stmts: _ },
+    "{" "}" => BlockExpr { stmts: vec![] },
+};
+
+Stmt: Stmt = {
+    Item => Stmt::Item,
+    Expr ";" => Stmt::Expr,
+    "let" "mut"? Pattern (":" Type)? "=" Expr ";" => Stmt::Let,
+};
+
+Ident: String = {
+    r"[a-zA-Z_][a-zA-Z0-9_]*",
+};
+
+Integer: i64 = {
+    r"[0-9]+(_[0-9]+)*",
+};
+
+Float: f64 = {
+    r"[0-9]+(_[0-9]+)*\.[0-9]+(_[0-9]+)*",
+};
+
+String: String = {
+    r#""([^"\\]|\\.)*""#,
+};
+
+Char: char = {
+    r"'([^'\\]|\\.)*'",
+};

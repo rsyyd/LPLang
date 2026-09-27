@@ -1,0 +1,23 @@
+[package]
+name = "lplang-fmt"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+description = "LPLang code formatter"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+clap = { workspace = true }
+clap_complete = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+lplang-compiler = { path = "../compiler" }
+
+[features]
+default = []

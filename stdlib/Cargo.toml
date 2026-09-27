@@ -1,0 +1,35 @@
+[package]
+name = "lplang-stdlib"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+description = "LPLang standard library"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+indexmap = { workspace = true }
+hashbrown = { workspace = true }
+smallvec = { workspace = true }
+bitflags = { workspace = true }
+once_cell = { workspace = true }
+crossbeam-channel = { workspace = true }
+parking_lot = { workspace = true }
+libc = { workspace = true }
+cc = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[features]
+default = []
+full = ["net", "crypto", "data"]
+net = []
+crypto = []
+data = []

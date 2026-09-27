@@ -1,70 +1,89 @@
-# Lumpo Language (LPLang)
+# LPLang
 
-General-purpose programming language. Source extension: `.lp`.
+> Familiar syntax, modern semantics. A pragmatic programming language for every scale.
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.15-blue.svg)](CHANGELOG.md)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-42%20passing-brightgreen.svg)](tests/)
+[![CI](https://github.com/rsyyd/LPLang/workflows/CI/badge.svg)](https://github.com/rsyyd/LPLang/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-nightly-orange.svg)](https://www.rust-lang.org/)
+[![Version](https://img.shields.io/github/v/tag/rsyyd/LPLang?label=version)](https://github.com/rsyyd/LPLang/tags)
 
-## Status
+## Status: **Pre-alpha — Active Development**
 
-| Component | State | Notes |
-|---|---|---|
-| Lexer | IMPLEMENTED | Stage 0 Python bootstrap |
-| Parser | IMPLEMENTED | Pratt precedence parsing |
-| AST | IMPLEMENTED | Strongly typed nodes |
-| Type checker | IMPLEMENTED | Static primitives, structs, enums, lists, tuples, inference |
-| Interpreter | IMPLEMENTED | Tree-walk runtime for Stage 0 |
-| Native Codegen | EXPERIMENTAL | C backend emission |
-| Concurrency | EXPERIMENTAL | async/await/spawn via threads |
-| Error handling | IMPLEMENTED | Result, Option, `?` operator |
-| Generics | IMPLEMENTED (Stage 0) | Generic functions & structs with call-site inference |
-| Control flow | IMPLEMENTED | if/else, while, for-in with range (`..`) |
-| Collections | IMPLEMENTED | List, Tuple literals & indexing |
-| Match / Patterns | IMPLEMENTED | Statement, expression, exhaustiveness checking |
-| Tooling (`lp`) | IMPLEMENTED | `lp run`, `lp build`, `lp check`, `lp test` |
-| Standard library | IMPLEMENTED | `result.lp`, `math_utils.lp` |
-| Self-hosting | PLANNED | Target Stage 5 bootstrap |
+LPLang is in early development. Expect breaking changes, missing features, and bugs.
+See [Roadmap](docs/src/meta/roadmap.md) for current phase.
 
-Nothing here is "better than X" until benchmarks exist. Claims are backed by reproducible tests in `tests/`.
-
-## Quick Start
+## Quickstart
 
 ```bash
-# Run an example
-./tools/lp run examples/01_basics.lp
+# Install (when packages exist)
+cargo install --git https://github.com/rsyyd/LPLang lp
 
-# Type check a file
-./tools/lp check examples/02_structs.lp
-
-# Run all unit tests
-python3 -m unittest discover -s tests
+# Or build from source
+git clone https://github.com/rsyyd/LPLang.git
+cd LPLang
+cargo build --release
+./target/release/lp run examples/hello.lp
 ```
 
-## Repository Layout
+## Example
 
+```lp
+# hello.lp
+use std::net::http::{Server, Request, Response}
+
+async fn handler(req: Request) -> Response {
+    let name = req.query("name").unwrap_or("world");
+    Response::ok(format!("Hello, {name}!"))
+}
+
+async fn main() -> Result<(), Error> {
+    let server = Server::bind("127.0.0.1:8080").await?;
+    server.serve(handler).await?;
+    Ok(())
+}
 ```
-LPLang/
-├── compiler/     # Bootstrap compiler (Python)
-├── runtime/      # Target runtime
-├── std/          # Standard library (.lp sources)
-├── tools/        # CLI toolchain (lp runner)
-├── tests/        # Unit & integration tests
-├── examples/     # Verified .lp runnable programs
-├── docs/         # Documentation
-├── spec/         # Formal language specification
-├── LICENSE       # MIT License
-├── CHANGELOG.md  # Version release history
-└── README.md
+
+```bash
+lp run hello.lp
+# Server running on http://127.0.0.1:8080
 ```
 
-## Bootstrap Plan
+## Features
 
-- **Stage 0:** Python-stdlib compiler (current).
-- **Stage 1–5:** Self-hosted compiler written in LPLang.
+| Feature | Status |
+|---------|--------|
+| Gradual typing (Python-like + Rust-like) | 🚧 In progress |
+| ARC + cycle detector (no GC pauses) | 🚧 In progress |
+| Structured concurrency (nurseries) | 🚧 In progress |
+| Comptime metaprogramming (Zig-style) | 📋 Planned |
+| WASM / JS backends | 📋 Planned |
+| Native AOT (Cranelift) | 📋 Planned |
+| Built-in package manager (`lpm`) | 🚧 In progress |
+| LSP / VS Code support | 📋 Planned |
+| Zero-config formatter | 📋 Planned |
 
-*No self-hosting claim is made until Stage 5 passes reproducibly.*
+## Design Principles
+
+1. **Familiar > Novel** — Syntax from Python/Rust/Go
+2. **Gradual typing default** — Types when you want them
+3. **ARC + cycles, not GC/ownership** — Deterministic, no pauses
+4. **Structured concurrency** — Nurseries, not goroutines
+5. **Comptime = metaprogramming** — Zig proved this works
+6. **Batteries included, swappable** — HTTP, JSON, crypto in stdlib
+7. **Tooling is part of the language** — `lp fmt`, `lp test`, `lp lsp`, `lpm`
+
+## Documentation
+
+- [Book](https://rsyyd.github.io/LPLang/) (when deployed)
+- [PRD](PRD.md) — Product Requirements Document
+- [Design Principles](PRD.md#3-design-principles-with-rejected-alternatives)
+- [Versioning Policy](PRD.md#9-versioning-no-hallucination-policy)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) — but honestly, it's a solo project right now.
+Open an issue or discussion if you want to chat.
 
 ## License
 
-MIT — see `LICENSE` file.
+MIT — see [LICENSE](LICENSE) for details.

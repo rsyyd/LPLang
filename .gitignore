@@ -1,12 +1,29 @@
-__pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-.eggs/
-*.so
-build/
+/target
+**/*.rs.bk
+Cargo.lock
+*.profraw
+*.profdata
+coverage/
+html/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# LPLang specific
+*.lp.cache
+.lp_cache/
+examples/*.wasm
+examples/*.js
+examples/*.mjs
+
+# Release artifacts
 dist/
-.venv/
-venv/
-.env
-*.lp.tmp
+release/

@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  RUST_TOOLCHAIN: nightly-2024-12-15
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Verify tag matches version
+        run: |
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+          CARGO_VERSION=$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name=="lplang-compiler") | .version')
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "Tag version $TAG_VERSION != Cargo version $CARGO_VERSION"
+            exit 1
+          fi
+      - name: Build release binaries
+        run: cargo build --workspace --release --all-targets
+      - name: Run tests
+        run: cargo test --workspace --release
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          cp target/release/lp dist/lp-linux-x86_64
+          strip dist/lp-linux-x86_64
+      - name: Generate changelog
+        run: cargo run -p lplang-versioning -- changelog > dist/CHANGELOG.md
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/lp-linux-x86_64
+            dist/CHANGELOG.md
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-crates:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Publish crates
+        run: |
+          for crate in compiler vm stdlib lpm lsp fmt versioning; do
+            cargo publish -p lplang-$crate --token ${{ secrets.CRATES_IO_TOKEN }}
+          done
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
