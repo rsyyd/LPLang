@@ -30,7 +30,7 @@ impl Gc {
             self.collect();
         }
 
-        let mut data = vec![0u8; size];
+        let data = vec![0u8; size];
         let obj = GcObject {
             data: UnsafeCell::new(data),
             marked: false,
@@ -116,7 +116,7 @@ impl Gc {
                 for (idx, _candidate) in self.objects.iter().enumerate() {
                     let candidate = &self.objects[idx];
                     let cptr = candidate.data.get() as *const u8;
-                    let cend = unsafe { cptr.add(candidate.size) };
+                    let cend = cptr.add(candidate.size);
                     if ptr >= cptr && ptr < cend {
                         to_add.push(idx);
                     }

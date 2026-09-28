@@ -28,13 +28,13 @@ impl Default for VmConfig {
 
 /// Virtual machine instance.
 pub struct Vm {
-    config: VmConfig,
+    _config: VmConfig,
     // TODO: registers, stack, heap, gc
 }
 
 impl Vm {
     pub fn new(config: VmConfig) -> Self {
-        Self { config }
+        Self { _config: config }
     }
 
     /// Execute bytecode from file.
@@ -44,7 +44,7 @@ impl Vm {
     }
 
     /// Execute bytecode from memory.
-    pub fn run_bytecode(&mut self, bytecode: &[u8]) -> Result<i32> {
+    pub fn run_bytecode(&mut self, _bytecode: &[u8]) -> Result<i32> {
         // TODO: implement interpreter
         unimplemented!("VM not yet implemented")
     }

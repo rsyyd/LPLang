@@ -82,7 +82,7 @@ impl Interpreter {
                 }
                 OpCode::Call => {
                     let func_idx = instr.operand as usize;
-                    let func = self.stack.pop().unwrap();
+                    let _func = self.stack.pop().unwrap();
                     let arity = self.bytecode.functions[func_idx].arity as usize;
                     let mut args = Vec::with_capacity(arity);
                     for _ in 0..arity {
