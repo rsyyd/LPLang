@@ -7,18 +7,14 @@
 [![Rust](https://img.shields.io/badge/rust-nightly-orange.svg)](https://www.rust-lang.org/)
 [![Version](https://img.shields.io/github/v/tag/rsyyd/LPLang?label=version)](https://github.com/rsyyd/LPLang/tags)
 
-## Status: **Pre-alpha — Active Development**
+## Status: Pre-alpha — Active Development
 
 LPLang is in early development. Expect breaking changes, missing features, and bugs.
-See [Roadmap](docs/src/meta/roadmap.md) for current phase.
 
 ## Quickstart
 
 ```bash
-# Install (when packages exist)
-cargo install --git https://github.com/rsyyd/LPLang lp
-
-# Or build from source
+# Build from source
 git clone https://github.com/rsyyd/LPLang.git
 cd LPLang
 cargo build --release
@@ -72,17 +68,9 @@ lp run hello.lp
 6. **Batteries included, swappable** — HTTP, JSON, crypto in stdlib
 7. **Tooling is part of the language** — `lp fmt`, `lp test`, `lp lsp`, `lpm`
 
-## Documentation
-
-- [Book](https://rsyyd.github.io/LPLang/) (when deployed)
-- [PRD](PRD.md) — Product Requirements Document
-- [Design Principles](PRD.md#3-design-principles-with-rejected-alternatives)
-- [Versioning Policy](PRD.md#9-versioning-no-hallucination-policy)
-
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) — but honestly, it's a solo project right now.
-Open an issue or discussion if you want to chat.
+See [CONTRIBUTING.md](CONTRIBUTING.md) — it's a solo project right now. Open an issue or discussion if you want to chat.
 
 ## License
 
