@@ -66,7 +66,7 @@ url = "2.4"  # older version without ICU deps
 # conventional-commit = "0.2"  # not on crates.io at 0.2
 
 # Codegen Backends
-cranelift = { version = "0.109", features = ["default"] }
+cranelift = { version = "0.136", features = ["default"] }
 cranelift-module = "0.109"
 cranelift-object = "0.109"
 # wasm-encoder = "0.259"  # requires Rust 1.88+, enable in Phase 3
