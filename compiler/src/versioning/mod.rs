@@ -1,9 +1,8 @@
 use anyhow::Result;
-use semver::Version;
 
 #[derive(Debug, Clone)]
 pub struct VersionInfo {
-    pub version: Version,
+    pub version: String,
     pub tier: Tier,
     pub build: u32,
     pub commit: String,
@@ -20,13 +19,12 @@ pub enum Tier {
 
 impl VersionInfo {
     pub fn from_cargo() -> Self {
-        let version = Version::parse(env!("CARGO_PKG_VERSION")).unwrap_or(Version::new(0, 0, 0));
         Self {
-            version,
+            version: env!("CARGO_PKG_VERSION").to_string(),
             tier: Tier::Alpha,
             build: 0,
-            commit: env!("VERGEN_GIT_SHA").to_string(),
-            date: env!("VERGEN_BUILD_TIMESTAMP").to_string(),
+            commit: std::env::var("VERGEN_GIT_SHA").unwrap_or_else(|_| "unknown".to_string()),
+            date: std::env::var("VERGEN_BUILD_TIMESTAMP").unwrap_or_else(|_| chrono::Utc::now().to_rfc3339()),
         }
     }
 

@@ -3,7 +3,7 @@ use std::fmt;
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+")]
-#[logos(skip r"#.*")]
+#[logos(skip(r"#[^\n]*", allow_greedy = true))]
 pub enum Token {
     #[token("fn")]
     Fn,
@@ -140,7 +140,10 @@ pub enum Token {
     #[token("]")]
     RBracket,
 
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
+    #[token("_", priority = 3)]
+    Underscore,
+
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string(), priority = 2)]
     Ident(String),
 
     #[regex(r"[0-9]+(_[0-9]+)*", |lex| lex.slice().replace('_', "").parse().ok())]
@@ -167,9 +170,6 @@ pub enum Token {
     True,
     #[token("false")]
     False,
-
-    #[token("_")]
-    Underscore,
 
     Error,
 }
@@ -205,30 +205,26 @@ impl fmt::Display for Token {
 }
 
 pub struct Lexer {
-    lexer: logos::Lexer<'static, Token>,
     source: String,
     filename: String,
 }
 
 impl Lexer {
     pub fn new(source: &str, filename: &str) -> Self {
-        let mut lexer = Token::lexer(source);
-        lexer.extras = filename;
         Self {
-            lexer,
             source: source.to_string(),
             filename: filename.to_string(),
         }
     }
 
     pub fn tokenize(&mut self) -> Vec<SpannedToken> {
+        let mut lexer = Token::lexer(&self.source);
         let mut tokens = Vec::new();
-        while let Some(token) = self.lexer.next() {
-            let span = self.lexer.span();
+        while let Some(token) = lexer.next() {
+            let span = lexer.span();
             match token {
                 Ok(tok) => tokens.push(tok.span(span)),
                 Err(_) => {
-                    let slice = &self.source[span.clone()];
                     tokens.push(SpannedToken {
                         token: Token::Error,
                         span,

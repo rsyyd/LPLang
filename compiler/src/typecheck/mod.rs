@@ -1,4 +1,4 @@
-use crate::ast::{Expr, FnParam, FnSig, Item, Pattern, Stmt, Type, Visibility};
+use crate::ast::{Expr, Item, Pattern, Stmt, Type};
 use crate::diagnostics::{DiagnosticBag, Span};
 use crate::hir::{HirExpr, HirFunction, HirItem, HirModule, HirPackage, HirPattern, HirStmt, HirType, PrimitiveTy};
 use std::collections::HashMap;
@@ -27,16 +27,8 @@ impl TypeEnv {
         self.vars.insert(name, ty);
     }
 
-    fn get(&self, name: &str) -> Option<&HirType> {
-        self.vars.get(name)
-    }
-
-    fn push_generics(&mut self, generics: Vec<String>) {
-        self.generics.extend(generics);
-    }
-
-    fn pop_generics(&mut self, count: usize) {
-        self.generics.truncate(self.generics.len().saturating_sub(count));
+    fn _get(&self, _name: &str) -> Option<&HirType> {
+        None
     }
 }
 
@@ -49,7 +41,7 @@ impl TypeChecker {
         }
     }
 
-    pub fn check(mut self, items: Vec<HirItem>) -> Result<HirPackage, DiagnosticBag> {
+    pub fn check(self, _items: Vec<HirItem>) -> Result<HirPackage, DiagnosticBag> {
         // TODO: implement type checking
         if self.diagnostics.has_errors() {
             Err(self.diagnostics)
@@ -58,27 +50,15 @@ impl TypeChecker {
         }
     }
 
-    fn fresh_type_var(&mut self) -> HirType {
+    fn _fresh_type_var(&mut self) -> HirType {
         let var = self.next_type_var;
         self.next_type_var += 1;
         HirType::Var(var)
     }
+}
 
-    fn unify(&mut self, expected: &HirType, found: &HirType, span: Span) -> Result<(), ()> {
-        // TODO: implement unification
-        Ok(())
-    }
-
-    fn check_expr(&mut self, expr: &Expr, expected: Option<&HirType>) -> HirType {
-        // TODO: implement expression type checking
-        HirType::Primitive(PrimitiveTy::Unit)
-    }
-
-    fn check_stmt(&mut self, stmt: &Stmt) {
-        // TODO
-    }
-
-    fn check_pattern(&mut self, pattern: &Pattern, expected: &HirType) {
-        // TODO
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new()
     }
 }

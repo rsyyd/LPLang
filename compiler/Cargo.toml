@@ -10,8 +10,6 @@ publish = false
 
 [dependencies]
 # Workspace deps
-lalrpop = { workspace = true, features = ["lexer"] }
-lalrpop-util = { workspace = true }
 logos = { workspace = true }
 ariadne = { workspace = true }
 thiserror = { workspace = true }
@@ -38,12 +36,11 @@ cranelift-object = { workspace = true, optional = true }
 # swc_ecma_codegen = { workspace = true, optional = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+chrono = { workspace = true }
 
 # Internal deps
+lplang-fmt = { path = "../fmt" }
 # lplang-versioning = { path = "../versioning" }  # disabled for Phase 0-1
-
-[build-dependencies]
-lalrpop = { workspace = true }
 
 [features]
 default = ["cranelift"]

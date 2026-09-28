@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
-use lplang_compiler::{CompileOptions, CompilerDriver, Target};
+use lplang_compiler::{CompileOptions, CompilerDriver};
+use lplang_fmt; // workspace member
+use lplang_compiler::hir::Target;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -100,7 +102,7 @@ fn main() -> anyhow::Result<()> {
             let target = target.map(|t| match t.as_str() {
                 "wasm" => Target::Wasm,
                 "js" => Target::Js,
-                "native" => Target::Cranelift,
+                "native" => Target::Native,
                 _ => Target::Bytecode,
             }).unwrap_or(Target::Bytecode);
 

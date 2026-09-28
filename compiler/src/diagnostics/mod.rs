@@ -1,4 +1,4 @@
-use ariadne::{Config, Label, Report, ReportKind, Source};
+use ariadne::{Config, Label, Report, ReportKind, FnCache};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -66,16 +66,10 @@ impl DiagnosticBag {
         id
     }
 
-    pub fn push(&mut self, label: Label<Span>) {
+    pub fn push(&mut self, kind: DiagnosticKind, label: Label<Span>, message: String) {
         self.diagnostics.push(Diagnostic {
-            kind: match label.kind {
-                ariadne::ReportKind::Error => DiagnosticKind::Error,
-                ariadne::ReportKind::Warning => DiagnosticKind::Warning,
-                ariadne::ReportKind::Advice => DiagnosticKind::Help,
-                ariadne::ReportKind::Note => DiagnosticKind::Info,
-                _ => DiagnosticKind::Info,
-            },
-            message: label.message.unwrap_or_default(),
+            kind,
+            message,
             labels: vec![label],
             notes: Vec::new(),
         });
@@ -117,21 +111,27 @@ impl DiagnosticBag {
             let kind = match diag.kind {
                 DiagnosticKind::Error => ReportKind::Error,
                 DiagnosticKind::Warning => ReportKind::Warning,
-                DiagnosticKind::Info => ReportKind::Note,
+                DiagnosticKind::Info => ReportKind::Advice,
                 DiagnosticKind::Help => ReportKind::Advice,
             };
 
-            let mut report = Report::build(kind, (), 0)
+            let file_id: usize = 0; // Use a default file ID
+
+            let mut report = Report::build(kind, file_id, 0)
                 .with_message(&diag.message)
                 .with_labels(diag.labels.clone())
-                .with_notes(diag.notes.clone())
                 .finish();
 
-            let mut cache = |id: &usize| {
-                self.sources.get(id).map(|s| s.as_str()).unwrap_or("")
+            // Notes are printed separately since add_note doesn't exist
+            for note in &diag.notes {
+                eprintln!("  note: {}", note);
+            }
+
+            let cache = |id: &usize| -> Result<&str, Box<dyn std::fmt::Debug>> {
+                Ok(self.sources.get(id).map(|s| s.as_str()).unwrap_or(""))
             };
 
-            report.eprint(Config::default().with_source_cache(&mut cache)).unwrap();
+            let _ = report.eprint(FnCache::new(cache));
         }
     }
 

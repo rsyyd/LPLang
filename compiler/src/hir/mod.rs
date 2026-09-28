@@ -1,6 +1,21 @@
 use crate::ast::{Item, Type, Visibility};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub enum Target {
+    #[default]
+    Bytecode,
+    Wasm,
+    Js,
+    Native,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Artifact {
+    pub bytes: Vec<u8>,
+    pub target: Target,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HirPackage {
     pub modules: Vec<HirModule>,

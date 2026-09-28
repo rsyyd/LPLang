@@ -200,7 +200,7 @@ pub struct TraitRef {
 pub enum Type {
     Path(TypePath),
     Group(Box<Type>),
-    Array(Box<Type>, Option<Expr>),
+    Array(Box<Type>, Option<Box<Expr>>),
     Ref(Box<Type>, Mutability),
     Fn(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
