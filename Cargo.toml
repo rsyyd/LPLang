@@ -23,7 +23,7 @@ description = "LPLang — Familiar syntax, modern semantics"
 logos = "0.16"
 
 # Diagnostics & Error Handling
-ariadne = "0.4"
+ariadne = "0.6"
 thiserror = "1.0"
 anyhow = "1.0"
 
