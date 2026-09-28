@@ -24,7 +24,7 @@ logos = "0.16"
 
 # Diagnostics & Error Handling
 ariadne = "0.4"
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 
 # Serialization
