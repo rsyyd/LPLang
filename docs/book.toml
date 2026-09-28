@@ -3,10 +3,9 @@ title = "LPLang Book"
 authors = ["rsyyd"]
 language = "en"
 src = "src"
-build-dir = "../book"
+build-dir = "book"
 
 [output.html]
-theme = "theme"
 default-theme = "ayu"
 mathjax-support = true
 copy-fonts = true
