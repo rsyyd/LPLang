@@ -2,13 +2,9 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 use crate::{
-    ast::AstNode,
     diagnostics::DiagnosticBag,
-    hir::{HirModule, Target},
+    hir::Target,
     lexer::Lexer,
-    // parser::Parser,  // disabled until parser is fixed
-    resolver::Resolver,
-    typecheck::TypeChecker,
     versioning::VersionInfo,
 };
 

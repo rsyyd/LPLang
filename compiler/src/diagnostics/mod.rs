@@ -1,4 +1,4 @@
-use ariadne::{Config, Label, Report, ReportKind, FnCache};
+use ariadne::{Label, Report, ReportKind, FnCache};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -117,7 +117,7 @@ impl DiagnosticBag {
 
             let file_id: usize = 0; // Use a default file ID
 
-            let mut report = Report::build(kind, file_id, 0)
+            let report = Report::build(kind, file_id, 0)
                 .with_message(&diag.message)
                 .with_labels(diag.labels.clone())
                 .finish();

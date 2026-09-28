@@ -1,6 +1,5 @@
-use crate::ast::{Expr, Item, Pattern, Stmt, Type};
-use crate::diagnostics::{DiagnosticBag, Span};
-use crate::hir::{HirExpr, HirFunction, HirItem, HirModule, HirPackage, HirPattern, HirStmt, HirType, PrimitiveTy};
+use crate::diagnostics::DiagnosticBag;
+use crate::hir::{HirItem, HirPackage, HirType};
 use std::collections::HashMap;
 
 pub struct TypeChecker {

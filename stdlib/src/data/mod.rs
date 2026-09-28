@@ -12,7 +12,7 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 pub mod serde {
-    use std::fmt;
+    
 
     pub trait Serialize {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

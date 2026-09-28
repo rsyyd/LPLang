@@ -13,7 +13,7 @@ impl std::error::Error for Error {}
 
 pub mod http {
     use super::Error;
-    use std::fmt;
+    
 
     pub struct Server;
     pub struct Request;

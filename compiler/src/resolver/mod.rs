@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Item, Pattern, Stmt, Type, UseItem};
+use crate::ast::Item;
 use crate::diagnostics::{DiagnosticBag, Span};
 use std::collections::HashMap;
 
@@ -41,7 +41,7 @@ impl Resolver {
         resolver
     }
 
-    pub fn resolve(mut self, _items: Vec<crate::ast::AstNode<Item>>) -> Result<Vec<crate::hir::HirItem>, DiagnosticBag> {
+    pub fn resolve(self, _items: Vec<crate::ast::AstNode<Item>>) -> Result<Vec<crate::hir::HirItem>, DiagnosticBag> {
         // TODO: implement resolver
         if self.diagnostics.has_errors() {
             Err(self.diagnostics)

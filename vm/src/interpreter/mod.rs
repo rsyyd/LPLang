@@ -1,4 +1,4 @@
-use crate::bytecode::{Bytecode, Instruction, OpCode};
+use crate::bytecode::{Bytecode, OpCode};
 use anyhow::Result;
 
 pub struct Interpreter {

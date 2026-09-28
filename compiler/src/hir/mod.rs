@@ -1,4 +1,4 @@
-use crate::ast::{Item, Type, Visibility};
+use crate::ast::Visibility;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
