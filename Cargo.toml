@@ -68,7 +68,7 @@ url = "2.4"  # older version without ICU deps
 # Codegen Backends
 cranelift = { version = "0.109", features = ["default"] }
 cranelift-module = "0.109"
-cranelift-object = "0.109"
+cranelift-object = "0.136"
 # wasm-encoder = "0.259"  # requires Rust 1.88+, enable in Phase 3
 # swc ecosystem - using compatible versions (JS backend in Phase 3)
 # swc = { version = "79", features = ["ecma", "visit"] }
